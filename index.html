@@ -13,145 +13,105 @@
   <!-- SIDEBAR -->
   <aside class="sidebar">
     <div class="brand">
-      <div class="brand-icon">⚙</div>
-      <div>
-        <div class="brand-name">EPUB Tools</div>
+      <img src="logo.webp" alt="VilPower" class="brand-logo" id="brandLogo" onerror="this.style.display='none';document.getElementById('brandFallback').style.display='block'"/>
+      <div class="brand-text" id="brandFallback" style="display:none">
+        <div class="brand-name">VilPower</div>
         <div class="brand-sub">QC Suite</div>
       </div>
     </div>
 
-    <!-- Tab 1 Sidebar Steps -->
-    <div class="sidebar-steps" data-tab-steps="1">
-      <div class="step-label">FOOTNOTE LINKER INTERNAL</div>
-
-      <div class="step" id="step1">
-        <div class="step-header">
-          <span class="step-num">1</span>
-          <span class="step-title">Upload XHTML File</span>
-          <span class="step-check" id="check1">✓</span>
-        </div>
-        <div class="step-body">
-          <button class="btn-upload" id="btnUpload1">
-            <span>📂</span> Choose File
-          </button>
-          <input type="file" id="fileInput1" accept=".xhtml,.html,.xml" hidden/>
-          <div class="file-name-display" id="fileNameDisplay">No file selected</div>
-        </div>
-      </div>
-
-      <div class="step" id="step2">
-        <div class="step-header">
-          <span class="step-num">2</span>
-          <span class="step-title">ID Prefix</span>
-          <span class="step-check" id="check2">✓</span>
-        </div>
-        <div class="step-body">
-          <div class="prefix-row">
-            <label class="prefix-label">Detected prefix:</label>
-            <input type="text" id="prefixInput" class="prefix-input" placeholder="e.g. ch3" value=""/>
-          </div>
-          <div class="prefix-hint">Auto-detected from filename. Edit if needed.</div>
-        </div>
-      </div>
-
-      <div class="step" id="step3">
-        <div class="step-header">
-          <span class="step-num">3</span>
-          <span class="step-title">Process File</span>
-        </div>
-        <div class="step-body">
-          <div class="progress-wrap" id="progressWrap">
-            <div class="progress-bar" id="progressBar"></div>
-          </div>
-          <button class="btn-run" id="btnProcess" disabled>
-            ▶ Process File
-          </button>
-        </div>
-      </div>
-
-      <div class="sidebar-download" id="sidebarDownload" style="display:none">
-        <button class="btn-download" id="btnDownload">
-          ⬇ Download Fixed File
-        </button>
-        <button class="btn-copy-file" id="btnCopyFile">
-          📋 Copy File Content
-        </button>
-      </div>
-    </div>
-
-    <!-- Tab 2 Sidebar Steps (future) -->
-    <div class="sidebar-steps" data-tab-steps="2" style="display:none">
-      <div class="step-label">PAGEBREAK FIXER</div>
-      <div class="coming-soon">🚧 Coming soon</div>
-    </div>
-
-    <!-- Tab 3 Sidebar Steps (future) -->
-    <div class="sidebar-steps" data-tab-steps="3" style="display:none">
-      <div class="step-label">TOC LINKER</div>
-      <div class="coming-soon">🚧 Coming soon</div>
-    </div>
+    <nav class="tool-nav">
+      <div class="nav-label">TOOLS</div>
+      <button class="tab-btn active" data-tab="1">
+        <span class="nav-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
+        </span>
+        <span class="nav-text">Footnote Linker Internal</span>
+      </button>
+      <button class="tab-btn" data-tab="2">
+        <span class="nav-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 8h18"/><path d="M6 3h12a2 2 0 0 1 2 2v1H4V5a2 2 0 0 1 2-2z"/><path d="M4 12h16v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg>
+        </span>
+        <span class="nav-text">Pagebreak Fixer</span>
+      </button>
+      <button class="tab-btn" data-tab="3">
+        <span class="nav-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>
+        </span>
+        <span class="nav-text">TOC Linker</span>
+      </button>
+    </nav>
 
     <div class="sidebar-foot">
-      <button class="theme-btn" id="themeToggle">🌙 Dark Mode</button>
+      <span class="version-text">v1.2.0</span>
     </div>
   </aside>
 
   <!-- MAIN -->
   <main class="main">
 
-    <!-- TAB BAR -->
-    <div class="tab-bar">
-      <button class="tab-btn active" data-tab="1">Footnote Linker Internal</button>
-      <button class="tab-btn" data-tab="2">Pagebreak Fixer</button>
-      <button class="tab-btn" data-tab="3">TOC Linker</button>
-    </div>
+    <!-- TOP BAR -->
+    <header class="top-bar">
+      <h1 class="top-title" id="topTitle">Footnote Linker Internal</h1>
+      <div class="top-actions">
+        <button class="icon-btn" id="themeToggle" title="Toggle theme" aria-label="Toggle theme">🌙</button>
+        <button class="icon-btn" id="settingsBtn" title="Settings" aria-label="Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.35.4.65.73.85.3.19.65.29 1 .29H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+      </div>
+    </header>
 
     <!-- TAB 1: FOOTNOTE LINKER -->
     <div class="tab-pane active" id="tabPane1">
 
-      <!-- Empty state -->
-      <div class="empty-state" id="emptyState1">
-        <div class="empty-icon">🔗</div>
-        <div class="empty-title">Footnote Linker Internal</div>
-        <div class="empty-desc">Upload an XHTML file from the sidebar to get started.<br/>This tool adds two-way anchor links between superscripts and footnotes.</div>
+      <!-- Empty state = full canvas drop zone -->
+      <div class="drop-canvas" id="emptyState1">
+        <div class="drop-zone" id="dropZone" tabindex="0" role="button" aria-label="Drop XHTML file here or click to browse">
+          <svg class="drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M12 3v13"/><path d="m7 8 5-5 5 5"/></svg>
+          <div class="drop-title">Drop XHTML file here or click to browse</div>
+          <div class="drop-desc">Adds two-way anchor links between superscripts and footnotes.<br/>Accepts .xhtml, .html and .xml</div>
+          <input type="file" id="fileInput1" accept=".xhtml,.html,.xml" hidden/>
+        </div>
       </div>
 
       <!-- Workspace (shown after file loaded) -->
       <div class="workspace" id="workspace1" style="display:none">
 
-        <!-- Stats Bar -->
-        <div class="stats-bar">
-          <div class="stat-card">
-            <div class="stat-num" id="statSupsFound">0</div>
-            <div class="stat-label">Sups Found</div>
+        <!-- Sticky top strip -->
+        <div class="file-strip">
+          <div class="strip-file">
+            <span class="file-icon" aria-hidden="true">📄</span>
+            <span class="file-title" id="fileTitleDisplay">filename.xhtml</span>
           </div>
-          <div class="stat-card">
-            <div class="stat-num" id="statFnFound">0</div>
-            <div class="stat-label">Footnotes Found</div>
+
+          <div class="strip-pills">
+            <div class="pill"><span class="pill-num" id="statSupsFound">0</span><span class="pill-label">Sups</span></div>
+            <div class="pill"><span class="pill-num" id="statFnFound">0</span><span class="pill-label">Footnotes</span></div>
+            <div class="pill pill-pass"><span class="pill-num" id="statMatched">0</span><span class="pill-label">Matched</span></div>
+            <div class="pill pill-fail"><span class="pill-num" id="statUnmatched">0</span><span class="pill-label">Unmatched</span></div>
           </div>
-          <div class="stat-card success">
-            <div class="stat-num" id="statMatched">0</div>
-            <div class="stat-label">Matched</div>
-          </div>
-          <div class="stat-card danger">
-            <div class="stat-num" id="statUnmatched">0</div>
-            <div class="stat-label">Unmatched</div>
+
+          <div class="strip-right">
+            <label class="prefix-row">
+              <span class="prefix-label">Prefix</span>
+              <input type="text" id="prefixInput" class="prefix-input" placeholder="e.g. ch3" value=""/>
+            </label>
+
+            <div class="segmented" role="tablist">
+              <button class="inner-tab-btn active" data-inner-tab="main">Preview</button>
+              <button class="inner-tab-btn" data-inner-tab="summary">Summary</button>
+            </div>
+
+            <button class="btn-run" id="btnProcess">▶ Process</button>
           </div>
         </div>
 
-        <!-- File name centered -->
-        <div class="file-title-bar">
-          <div class="file-icon">📄</div>
-          <div class="file-title" id="fileTitleDisplay">filename.xhtml</div>
+        <!-- Progress bar under strip -->
+        <div class="progress-wrap" id="progressWrap">
+          <div class="progress-bar" id="progressBar"></div>
         </div>
 
-        <!-- Inner Tabs -->
-        <div class="inner-tab-bar">
-          <button class="inner-tab-btn active" data-inner-tab="main">Main</button>
-          <button class="inner-tab-btn" data-inner-tab="summary">Summary</button>
-        </div>
-
-        <!-- INNER TAB: MAIN -->
+        <!-- INNER TAB: PREVIEW -->
         <div class="inner-tab-pane active" id="innerPaneMain">
           <div class="doc-preview" id="docPreview"></div>
         </div>
@@ -159,8 +119,8 @@
         <!-- INNER TAB: SUMMARY -->
         <div class="inner-tab-pane" id="innerPaneSummary">
           <div class="summary-toolbar">
-            <button class="btn-secondary" id="btnCopyChanges">📋 Copy Changes</button>
-            <button class="btn-secondary" id="btnDownloadReport">📊 Download Report</button>
+            <button class="btn-secondary" id="btnCopyChanges">Copy Changes</button>
+            <button class="btn-secondary" id="btnDownloadReport">Download Report</button>
           </div>
           <div class="split-preview">
             <div class="preview-panel">
@@ -182,23 +142,31 @@
         </div>
 
       </div>
-    </div>
 
-    <!-- TAB 2: PAGEBREAK FIXER (future) -->
-    <div class="tab-pane" id="tabPane2">
-      <div class="empty-state">
-        <div class="empty-icon">🚧</div>
-        <div class="empty-title">Pagebreak Fixer</div>
-        <div class="empty-desc">This tool is coming soon.</div>
+      <!-- Floating download dock -->
+      <div class="download-dock" id="sidebarDownload" style="display:none">
+        <button class="btn-copy-file" id="btnCopyFile">Copy</button>
+        <button class="btn-download" id="btnDownload">⬇ Download Fixed File</button>
       </div>
     </div>
 
-    <!-- TAB 3: TOC LINKER (future) -->
+    <!-- TAB 2: PAGEBREAK FIXER -->
+    <div class="tab-pane" id="tabPane2">
+      <div class="empty-state">
+        <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 8h18"/><path d="M6 3h12a2 2 0 0 1 2 2v1H4V5a2 2 0 0 1 2-2z"/><path d="M4 12h16v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg>
+        <div class="empty-title">Pagebreak Fixer</div>
+        <div class="empty-tag">In development</div>
+        <div class="empty-desc">Will normalise <code>epub:type="pagebreak"</code> markers — repairing missing IDs, out-of-order page numbers and duplicate breaks across a chapter.</div>
+      </div>
+    </div>
+
+    <!-- TAB 3: TOC LINKER -->
     <div class="tab-pane" id="tabPane3">
       <div class="empty-state">
-        <div class="empty-icon">🚧</div>
+        <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>
         <div class="empty-title">TOC Linker</div>
-        <div class="empty-desc">This tool is coming soon.</div>
+        <div class="empty-tag">In development</div>
+        <div class="empty-desc">Will build and validate <code>nav.xhtml</code> entries against chapter headings, flagging broken or orphaned table-of-contents targets.</div>
       </div>
     </div>
 
@@ -210,8 +178,8 @@
 
 <!-- Badge context menu -->
 <div class="ctx-menu" id="ctxMenu" style="display:none">
-  <button class="ctx-item" id="ctxDelete">🗑 Delete</button>
-  <button class="ctx-item" id="ctxChange">🔁 Change</button>
+  <button class="ctx-item" id="ctxDelete">Delete</button>
+  <button class="ctx-item" id="ctxChange">Change</button>
 </div>
 
 <!-- Badge hover tooltip -->

@@ -20,11 +20,11 @@ let state = {
 
 /* ── DOM REFS ── */
 const fileInput1      = document.getElementById('fileInput1');
-const btnUpload1      = document.getElementById('btnUpload1');
-const fileNameDisplay = document.getElementById('fileNameDisplay');
+const dropZone        = document.getElementById('dropZone');
 const prefixInput     = document.getElementById('prefixInput');
 const btnProcess      = document.getElementById('btnProcess');
 const progressBar     = document.getElementById('progressBar');
+const progressWrap    = document.getElementById('progressWrap');
 const sidebarDownload = document.getElementById('sidebarDownload');
 const btnDownload     = document.getElementById('btnDownload');
 const btnCopyFile     = document.getElementById('btnCopyFile');
@@ -69,12 +69,12 @@ const toastStack      = document.getElementById('toastStack');
 const html = document.documentElement;
 if (localStorage.getItem('epub-theme') === 'dark') {
   html.setAttribute('data-theme', 'dark');
-  themeToggle.textContent = '☀️ Light Mode';
+  themeToggle.textContent = '☀️';
 }
 themeToggle.addEventListener('click', () => {
   const isDark = html.getAttribute('data-theme') === 'dark';
   html.setAttribute('data-theme', isDark ? 'light' : 'dark');
-  themeToggle.textContent = isDark ? '🌙 Dark Mode' : '☀️ Light Mode';
+  themeToggle.textContent = isDark ? '🌙' : '☀️';
   localStorage.setItem('epub-theme', isDark ? 'light' : 'dark');
 });
 
@@ -84,11 +84,9 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     const tab = btn.dataset.tab;
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-    document.querySelectorAll('[data-tab-steps]').forEach(s => s.style.display = 'none');
     btn.classList.add('active');
     document.getElementById('tabPane' + tab).classList.add('active');
-    const steps = document.querySelector(`[data-tab-steps="${tab}"]`);
-    if (steps) steps.style.display = 'block';
+    document.getElementById('topTitle').textContent = btn.querySelector('.nav-text').textContent;
   });
 });
 
@@ -105,15 +103,30 @@ document.querySelectorAll('.inner-tab-btn').forEach(btn => {
   btn.addEventListener('click', () => switchInnerTab(btn.dataset.innerTab));
 });
 
-/* ── FILE UPLOAD ── */
-btnUpload1.addEventListener('click', () => fileInput1.click());
+/* ── FILE UPLOAD (click + drag/drop on the canvas drop zone) ── */
+dropZone.addEventListener('click', () => fileInput1.click());
+dropZone.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput1.click(); }
+});
+
+['dragenter', 'dragover'].forEach(evt => {
+  dropZone.addEventListener(evt, (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+});
+['dragleave', 'drop'].forEach(evt => {
+  dropZone.addEventListener(evt, (e) => { e.preventDefault(); dropZone.classList.remove('dragover'); });
+});
+dropZone.addEventListener('drop', (e) => {
+  const file = e.dataTransfer && e.dataTransfer.files[0];
+  if (file) loadFile(file);
+});
 
 fileInput1.addEventListener('change', () => {
   const file = fileInput1.files[0];
-  if (!file) return;
+  if (file) loadFile(file);
+});
 
+function loadFile(file) {
   state.fileName = file.name;
-  fileNameDisplay.textContent = file.name;
 
   // Auto-detect prefix from filename
   // e.g. 09_318AR_ch3.xhtml -> ch3
@@ -123,20 +136,35 @@ fileInput1.addEventListener('change', () => {
   state.prefix = lastPart;
   prefixInput.value = lastPart;
 
-  // Mark step 1 done
-  document.getElementById('check1').classList.add('visible');
-
-  // Enable process button
   btnProcess.disabled = false;
 
-  // Read file
   const reader = new FileReader();
   reader.onload = (e) => {
     state.rawContent = e.target.result;
+
+    // Reveal the workspace immediately so the strip (prefix + Process) is reachable
+    emptyState1.style.display = 'none';
+    workspace1.style.display  = 'flex';
+    fileTitleDisplay.textContent = file.name;
+
+    // Pre-scan so the pre-process preview shows correct badge colours
+    const pre = scanPreLinked(state.rawContent);
+    state.preLinkedBodyNums = pre.preBody;
+    state.preLinkedFnNums   = pre.preFn;
+    state.fnTextMap         = scanFootnoteTexts(state.rawContent);
+    state.processedContent  = '';
+    state.bodyNums = [];
+    state.fnNums   = [];
+    sidebarDownload.style.display = 'none';
+
+    renderDocPreview(state.rawContent);
+    updateStats();
+    switchInnerTab('main');
+
     toast(`File loaded: ${file.name}`, 'success');
   };
   reader.readAsText(file, 'utf-8');
-});
+}
 
 /* ── PROCESS ── */
 btnProcess.addEventListener('click', () => {
@@ -334,9 +362,8 @@ function renderWorkspace() {
   // Stats + summary lists
   renderStatsAndLists();
 
-  // Show download
-  sidebarDownload.style.display = 'block';
-  document.getElementById('check2').classList.add('visible');
+  // Show floating download dock
+  sidebarDownload.style.display = 'flex';
 
   // Doc preview (Main inner tab)
   renderDocPreview(state.processedContent || state.rawContent);
@@ -538,6 +565,16 @@ function closeContextMenu() {
 document.addEventListener('click', (e) => {
   if (ctxMenu.style.display !== 'none' && !ctxMenu.contains(e.target)) closeContextMenu();
 });
+/* Esc closes the menu; Delete triggers the delete action while it is open */
+document.addEventListener('keydown', (e) => {
+  if (ctxMenu.style.display === 'none') return;
+  if (e.key === 'Escape') { e.preventDefault(); closeContextMenu(); }
+  else if (e.key === 'Delete') {
+    e.preventDefault();
+    if (contextTarget) deleteLink(contextTarget.role, contextTarget.num);
+    closeContextMenu();
+  }
+});
 ctxDelete.addEventListener('click', () => {
   if (!contextTarget) return;
   deleteLink(contextTarget.role, contextTarget.num);
@@ -738,6 +775,10 @@ function openChangeModal(num) {
   changeModal.style.display = 'flex';
   changeSearchInput.focus();
 }
+function closeChangeModal() {
+  changeModal.style.display = 'none';
+  changeTargetNum = null;
+}
 function renderChangeList(filter) {
   changeFnList.innerHTML = '';
   const f = filter.trim().toLowerCase();
@@ -751,15 +792,39 @@ function renderChangeList(filter) {
       item.innerHTML = `<span class="fn-option-num">${escapeHtml(n)}</span><span class="fn-option-text">${escapeHtml(snippet)}</span>`;
       item.addEventListener('click', () => {
         changeLink(changeTargetNum, n);
-        changeModal.style.display = 'none';
+        closeChangeModal();
       });
       changeFnList.appendChild(item);
     });
+  const first = changeFnList.firstElementChild;
+  if (first) first.classList.add('active');
 }
 changeSearchInput.addEventListener('input', () => renderChangeList(changeSearchInput.value));
-changeModalClose.addEventListener('click', () => changeModal.style.display = 'none');
+changeModalClose.addEventListener('click', closeChangeModal);
 changeModal.addEventListener('click', (e) => {
-  if (e.target === changeModal) changeModal.style.display = 'none';
+  if (e.target === changeModal) closeChangeModal();
+});
+
+/* Arrow keys move the highlighted option, Enter picks it, Esc closes */
+changeModal.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { e.preventDefault(); closeChangeModal(); return; }
+
+  const options = [...changeFnList.querySelectorAll('.fn-option')];
+  if (!options.length) return;
+  let idx = options.findIndex(o => o.classList.contains('active'));
+
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    idx = e.key === 'ArrowDown'
+      ? (idx + 1 + options.length) % options.length
+      : (idx - 1 + options.length) % options.length;
+    options.forEach(o => o.classList.remove('active'));
+    options[idx].classList.add('active');
+    options[idx].scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    (options[idx] || options[0]).click();
+  }
 });
 
 /* ── COPY CHANGES ── */
@@ -838,7 +903,29 @@ function createLinkItem(num, id, href, isMatched, type) {
   div.appendChild(numEl);
   div.appendChild(info);
   div.appendChild(status);
+
+  div.title = 'Jump to this anchor in the preview';
+  div.addEventListener('click', () => jumpToBadge(type, num));
+
   return div;
+}
+
+/* ── SUMMARY ROW -> PREVIEW JUMP ── */
+function jumpToBadge(role, num) {
+  switchInnerTab('main');
+  const badge = docPreview.querySelector(`.sup-badge[data-num="${num}"][data-role="${role}"]`);
+  if (!badge) { toast(`No anchor rendered for sup ${num}.`, 'warning'); return; }
+  badge.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  anchorFlash(badge);
+}
+
+/* Brief yellow flash that fades back to the badge's own status colour */
+function anchorFlash(el) {
+  el.style.setProperty('--original-color', getComputedStyle(el).backgroundColor);
+  el.classList.remove('anchor-flash');
+  void el.offsetWidth; // restart animation
+  el.classList.add('anchor-flash');
+  el.addEventListener('animationend', () => el.classList.remove('anchor-flash'), { once: true });
 }
 
 /* ── DOWNLOAD ── */
@@ -859,7 +946,7 @@ btnDownload.addEventListener('click', () => {
 btnCopyFile.addEventListener('click', () => {
   if (!state.processedContent) { toast('Nothing to copy yet.', 'error'); return; }
 
-  const originalLabel = '📋 Copy File Content';
+  const originalLabel = 'Copy';
   btnCopyFile.textContent = 'Copying...';
   btnCopyFile.disabled = true;
 
@@ -877,6 +964,7 @@ btnCopyFile.addEventListener('click', () => {
 /* ── PROGRESS ANIMATION ── */
 function animateProgress(callback) {
   progressBar.style.width = '0%';
+  progressWrap.style.visibility = 'visible';
   btnProcess.disabled = true;
   let pct = 0;
   const iv = setInterval(() => {
@@ -891,6 +979,7 @@ function animateProgress(callback) {
     callback();
     setTimeout(() => {
       progressBar.style.width = '0%';
+      progressWrap.style.visibility = 'hidden';
       btnProcess.disabled = false;
     }, 600);
   }, 500);
@@ -902,6 +991,10 @@ function toast(msg, type = 'success') {
   el.className = `toast ${type}`;
   el.textContent = msg;
   toastStack.appendChild(el);
-  setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity 0.3s'; }, 2800);
-  setTimeout(() => el.remove(), 3200);
+
+  // Keep at most 3 stacked — drop the oldest
+  while (toastStack.children.length > 3) toastStack.firstElementChild.remove();
+
+  setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity 0.3s'; }, 3700);
+  setTimeout(() => el.remove(), 4000);
 }
