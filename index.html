@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>EPUB Tool Suite</title>
+<link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-icon">⚙</div>
+      <div>
+        <div class="brand-name">EPUB Tools</div>
+        <div class="brand-sub">QC Suite</div>
+      </div>
+    </div>
+
+    <!-- Tab 1 Sidebar Steps -->
+    <div class="sidebar-steps" data-tab-steps="1">
+      <div class="step-label">FOOTNOTE LINKER INTERNAL</div>
+
+      <div class="step" id="step1">
+        <div class="step-header">
+          <span class="step-num">1</span>
+          <span class="step-title">Upload XHTML File</span>
+          <span class="step-check" id="check1">✓</span>
+        </div>
+        <div class="step-body">
+          <button class="btn-upload" id="btnUpload1">
+            <span>📂</span> Choose File
+          </button>
+          <input type="file" id="fileInput1" accept=".xhtml,.html,.xml" hidden/>
+          <div class="file-name-display" id="fileNameDisplay">No file selected</div>
+        </div>
+      </div>
+
+      <div class="step" id="step2">
+        <div class="step-header">
+          <span class="step-num">2</span>
+          <span class="step-title">ID Prefix</span>
+          <span class="step-check" id="check2">✓</span>
+        </div>
+        <div class="step-body">
+          <div class="prefix-row">
+            <label class="prefix-label">Detected prefix:</label>
+            <input type="text" id="prefixInput" class="prefix-input" placeholder="e.g. ch3" value=""/>
+          </div>
+          <div class="prefix-hint">Auto-detected from filename. Edit if needed.</div>
+        </div>
+      </div>
+
+      <div class="step" id="step3">
+        <div class="step-header">
+          <span class="step-num">3</span>
+          <span class="step-title">Process File</span>
+        </div>
+        <div class="step-body">
+          <div class="progress-wrap" id="progressWrap">
+            <div class="progress-bar" id="progressBar"></div>
+          </div>
+          <button class="btn-run" id="btnProcess" disabled>
+            ▶ Process File
+          </button>
+        </div>
+      </div>
+
+      <div class="sidebar-download" id="sidebarDownload" style="display:none">
+        <button class="btn-download" id="btnDownload">
+          ⬇ Download Fixed File
+        </button>
+        <button class="btn-copy-file" id="btnCopyFile">
+          📋 Copy File Content
+        </button>
+      </div>
+    </div>
+
+    <!-- Tab 2 Sidebar Steps (future) -->
+    <div class="sidebar-steps" data-tab-steps="2" style="display:none">
+      <div class="step-label">PAGEBREAK FIXER</div>
+      <div class="coming-soon">🚧 Coming soon</div>
+    </div>
+
+    <!-- Tab 3 Sidebar Steps (future) -->
+    <div class="sidebar-steps" data-tab-steps="3" style="display:none">
+      <div class="step-label">TOC LINKER</div>
+      <div class="coming-soon">🚧 Coming soon</div>
+    </div>
+
+    <div class="sidebar-foot">
+      <button class="theme-btn" id="themeToggle">🌙 Dark Mode</button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- TAB BAR -->
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="1">Footnote Linker Internal</button>
+      <button class="tab-btn" data-tab="2">Pagebreak Fixer</button>
+      <button class="tab-btn" data-tab="3">TOC Linker</button>
+    </div>
+
+    <!-- TAB 1: FOOTNOTE LINKER -->
+    <div class="tab-pane active" id="tabPane1">
+
+      <!-- Empty state -->
+      <div class="empty-state" id="emptyState1">
+        <div class="empty-icon">🔗</div>
+        <div class="empty-title">Footnote Linker Internal</div>
+        <div class="empty-desc">Upload an XHTML file from the sidebar to get started.<br/>This tool adds two-way anchor links between superscripts and footnotes.</div>
+      </div>
+
+      <!-- Workspace (shown after file loaded) -->
+      <div class="workspace" id="workspace1" style="display:none">
+
+        <!-- Stats Bar -->
+        <div class="stats-bar">
+          <div class="stat-card">
+            <div class="stat-num" id="statSupsFound">0</div>
+            <div class="stat-label">Sups Found</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num" id="statFnFound">0</div>
+            <div class="stat-label">Footnotes Found</div>
+          </div>
+          <div class="stat-card success">
+            <div class="stat-num" id="statMatched">0</div>
+            <div class="stat-label">Matched</div>
+          </div>
+          <div class="stat-card danger">
+            <div class="stat-num" id="statUnmatched">0</div>
+            <div class="stat-label">Unmatched</div>
+          </div>
+        </div>
+
+        <!-- File name centered -->
+        <div class="file-title-bar">
+          <div class="file-icon">📄</div>
+          <div class="file-title" id="fileTitleDisplay">filename.xhtml</div>
+        </div>
+
+        <!-- Inner Tabs -->
+        <div class="inner-tab-bar">
+          <button class="inner-tab-btn active" data-inner-tab="main">Main</button>
+          <button class="inner-tab-btn" data-inner-tab="summary">Summary</button>
+        </div>
+
+        <!-- INNER TAB: MAIN -->
+        <div class="inner-tab-pane active" id="innerPaneMain">
+          <div class="doc-preview" id="docPreview"></div>
+        </div>
+
+        <!-- INNER TAB: SUMMARY -->
+        <div class="inner-tab-pane" id="innerPaneSummary">
+          <div class="summary-toolbar">
+            <button class="btn-secondary" id="btnCopyChanges">📋 Copy Changes</button>
+            <button class="btn-secondary" id="btnDownloadReport">📊 Download Report</button>
+          </div>
+          <div class="split-preview">
+            <div class="preview-panel">
+              <div class="panel-header">
+                <span class="panel-badge body-badge">BODY</span>
+                Superscripts
+              </div>
+              <div class="panel-list" id="bodySupsList"></div>
+            </div>
+            <div class="preview-divider"></div>
+            <div class="preview-panel">
+              <div class="panel-header">
+                <span class="panel-badge fn-badge">FOOTNOTES</span>
+                Footnote Anchors
+              </div>
+              <div class="panel-list" id="footnotesList"></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- TAB 2: PAGEBREAK FIXER (future) -->
+    <div class="tab-pane" id="tabPane2">
+      <div class="empty-state">
+        <div class="empty-icon">🚧</div>
+        <div class="empty-title">Pagebreak Fixer</div>
+        <div class="empty-desc">This tool is coming soon.</div>
+      </div>
+    </div>
+
+    <!-- TAB 3: TOC LINKER (future) -->
+    <div class="tab-pane" id="tabPane3">
+      <div class="empty-state">
+        <div class="empty-icon">🚧</div>
+        <div class="empty-title">TOC Linker</div>
+        <div class="empty-desc">This tool is coming soon.</div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Toast -->
+<div class="toast-stack" id="toastStack"></div>
+
+<!-- Badge context menu -->
+<div class="ctx-menu" id="ctxMenu" style="display:none">
+  <button class="ctx-item" id="ctxDelete">🗑 Delete</button>
+  <button class="ctx-item" id="ctxChange">🔁 Change</button>
+</div>
+
+<!-- Badge hover tooltip -->
+<div class="badge-tooltip" id="badgeTooltip" style="display:none"></div>
+
+<!-- Change-footnote modal -->
+<div class="modal-overlay" id="changeModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span>Select Footnote</span>
+      <button class="modal-close" id="changeModalClose">✕</button>
+    </div>
+    <input type="text" id="changeSearchInput" class="modal-search" placeholder="Search footnotes..."/>
+    <div class="modal-list" id="changeFnList"></div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
