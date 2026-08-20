@@ -20,15 +20,23 @@ let state = {
 
 /* ── DOM REFS ── */
 const fileInput1      = document.getElementById('fileInput1');
-const dropZone        = document.getElementById('dropZone');
+const pickFile        = document.getElementById('pickFile');
+const fileBtnText     = document.getElementById('fileBtnText');
+const fileStatus      = document.getElementById('fileStatus');
+const step1           = document.getElementById('step1');
+const step2           = document.getElementById('step2');
 const prefixInput     = document.getElementById('prefixInput');
 const btnProcess      = document.getElementById('btnProcess');
-const progressBar     = document.getElementById('progressBar');
+const progressFill    = document.getElementById('progressFill');
 const progressWrap    = document.getElementById('progressWrap');
-const sidebarDownload = document.getElementById('sidebarDownload');
+const progressPct     = document.getElementById('progressPct');
+const summaryBar      = document.getElementById('summaryBar');
+const fileBar         = document.getElementById('fileBar');
 const btnDownload     = document.getElementById('btnDownload');
 const btnCopyFile     = document.getElementById('btnCopyFile');
 const themeToggle     = document.getElementById('themeToggle');
+const themeIcon       = document.getElementById('themeIcon');
+const themeLabel      = document.getElementById('themeLabel');
 
 const emptyState1     = document.getElementById('emptyState1');
 const workspace1      = document.getElementById('workspace1');
@@ -59,23 +67,33 @@ const changeModal       = document.getElementById('changeModal');
 const changeModalClose  = document.getElementById('changeModalClose');
 const changeSearchInput = document.getElementById('changeSearchInput');
 const changeFnList      = document.getElementById('changeFnList');
+const changeModalSel    = document.getElementById('changeModalSel');
 
 let contextTarget = null; // { role, num }
 let changeTargetNum = null;
 
 const toastStack      = document.getElementById('toastStack');
 
+/* ── LUCIDE ICONS ──
+   Re-runs after any markup that adds <i data-lucide="..."> nodes. */
+function drawIcons() {
+  if (window.lucide && typeof window.lucide.createIcons === 'function') window.lucide.createIcons();
+}
+
 /* ── THEME ── */
 const html = document.documentElement;
-if (localStorage.getItem('epub-theme') === 'dark') {
-  html.setAttribute('data-theme', 'dark');
-  themeToggle.textContent = '☀️';
+function applyTheme(theme) {
+  html.setAttribute('data-theme', theme);
+  themeIcon.setAttribute('data-lucide', theme === 'dark' ? 'sun' : 'moon');
+  themeLabel.textContent = theme === 'dark' ? 'Light mode' : 'Dark mode';
+  drawIcons();
 }
+applyTheme(localStorage.getItem('epub-theme') === 'dark' ? 'dark' : 'light');
+
 themeToggle.addEventListener('click', () => {
-  const isDark = html.getAttribute('data-theme') === 'dark';
-  html.setAttribute('data-theme', isDark ? 'light' : 'dark');
-  themeToggle.textContent = isDark ? '🌙' : '☀️';
-  localStorage.setItem('epub-theme', isDark ? 'light' : 'dark');
+  const next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+  localStorage.setItem('epub-theme', next);
 });
 
 /* ── TABS ── */
@@ -83,10 +101,9 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     const tab = btn.dataset.tab;
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(p => p.hidden = true);
     btn.classList.add('active');
-    document.getElementById('tabPane' + tab).classList.add('active');
-    document.getElementById('topTitle').textContent = btn.querySelector('.nav-text').textContent;
+    document.getElementById('tabPane' + tab).hidden = false;
   });
 });
 
@@ -103,19 +120,16 @@ document.querySelectorAll('.inner-tab-btn').forEach(btn => {
   btn.addEventListener('click', () => switchInnerTab(btn.dataset.innerTab));
 });
 
-/* ── FILE UPLOAD (click + drag/drop on the canvas drop zone) ── */
-dropZone.addEventListener('click', () => fileInput1.click());
-dropZone.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput1.click(); }
-});
+/* ── FILE UPLOAD (step 1 button — click or drag a file onto it) ── */
+pickFile.addEventListener('click', () => fileInput1.click());
 
 ['dragenter', 'dragover'].forEach(evt => {
-  dropZone.addEventListener(evt, (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+  pickFile.addEventListener(evt, (e) => { e.preventDefault(); pickFile.classList.add('dragover'); });
 });
 ['dragleave', 'drop'].forEach(evt => {
-  dropZone.addEventListener(evt, (e) => { e.preventDefault(); dropZone.classList.remove('dragover'); });
+  pickFile.addEventListener(evt, (e) => { e.preventDefault(); pickFile.classList.remove('dragover'); });
 });
-dropZone.addEventListener('drop', (e) => {
+pickFile.addEventListener('drop', (e) => {
   const file = e.dataTransfer && e.dataTransfer.files[0];
   if (file) loadFile(file);
 });
@@ -124,6 +138,14 @@ fileInput1.addEventListener('change', () => {
   const file = fileInput1.files[0];
   if (file) loadFile(file);
 });
+
+/* Run stays disabled until step 1 (file) and step 2 (prefix) are both satisfied */
+function syncRunButton() {
+  const ready = Boolean(state.rawContent) && prefixInput.value.trim() !== '';
+  btnProcess.disabled = !ready;
+  step2.classList.toggle('done', prefixInput.value.trim() !== '');
+}
+prefixInput.addEventListener('input', syncRunButton);
 
 function loadFile(file) {
   state.fileName = file.name;
@@ -136,15 +158,22 @@ function loadFile(file) {
   state.prefix = lastPart;
   prefixInput.value = lastPart;
 
-  btnProcess.disabled = false;
+  // Step 1 UI
+  pickFile.classList.add('selected');
+  fileBtnText.textContent = file.name;
+  fileStatus.textContent = 'File loaded';
+  fileStatus.classList.add('ok');
+  step1.classList.add('done');
 
   const reader = new FileReader();
   reader.onload = (e) => {
     state.rawContent = e.target.result;
+    syncRunButton();
 
-    // Reveal the workspace immediately so the strip (prefix + Process) is reachable
-    emptyState1.style.display = 'none';
-    workspace1.style.display  = 'flex';
+    // Reveal the workspace immediately so the preview is visible before processing
+    emptyState1.hidden = true;
+    workspace1.hidden  = false;
+    fileBar.hidden     = false;
     fileTitleDisplay.textContent = file.name;
 
     // Pre-scan so the pre-process preview shows correct badge colours
@@ -155,7 +184,7 @@ function loadFile(file) {
     state.processedContent  = '';
     state.bodyNums = [];
     state.fnNums   = [];
-    sidebarDownload.style.display = 'none';
+    summaryBar.hidden = true;
 
     renderDocPreview(state.rawContent);
     updateStats();
@@ -356,14 +385,15 @@ function renderWorkspace() {
   fileTitleDisplay.textContent = fileName;
 
   // Show workspace
-  emptyState1.style.display  = 'none';
-  workspace1.style.display   = 'flex';
+  emptyState1.hidden = true;
+  workspace1.hidden  = false;
+  fileBar.hidden     = false;
 
   // Stats + summary lists
   renderStatsAndLists();
 
-  // Show floating download dock
-  sidebarDownload.style.display = 'flex';
+  // Show the summary bar (stats + Copy / Download)
+  summaryBar.hidden = false;
 
   // Doc preview (Main inner tab)
   renderDocPreview(state.processedContent || state.rawContent);
@@ -546,10 +576,10 @@ function escapeHtml(str) {
 /* ── CONTEXT MENU ── */
 function openContextMenu(e, badge) {
   contextTarget = { role: badge.dataset.role, num: badge.dataset.num };
-  ctxChange.style.display = contextTarget.role === 'body' ? 'block' : 'none';
+  ctxChange.hidden = contextTarget.role !== 'body';
 
-  ctxMenu.style.display = 'block';
-  const menuW = ctxMenu.offsetWidth || 130;
+  ctxMenu.hidden = false;
+  const menuW = ctxMenu.offsetWidth || 150;
   const menuH = ctxMenu.offsetHeight || 80;
   let x = e.clientX;
   let y = e.clientY;
@@ -559,15 +589,15 @@ function openContextMenu(e, badge) {
   ctxMenu.style.top  = y + window.scrollY + 'px';
 }
 function closeContextMenu() {
-  ctxMenu.style.display = 'none';
+  ctxMenu.hidden = true;
   contextTarget = null;
 }
 document.addEventListener('click', (e) => {
-  if (ctxMenu.style.display !== 'none' && !ctxMenu.contains(e.target)) closeContextMenu();
+  if (!ctxMenu.hidden && !ctxMenu.contains(e.target)) closeContextMenu();
 });
 /* Esc closes the menu; Delete triggers the delete action while it is open */
 document.addEventListener('keydown', (e) => {
-  if (ctxMenu.style.display === 'none') return;
+  if (ctxMenu.hidden) return;
   if (e.key === 'Escape') { e.preventDefault(); closeContextMenu(); }
   else if (e.key === 'Delete') {
     e.preventDefault();
@@ -598,23 +628,25 @@ function showTooltip(e, badge) {
     <div class="tt-row"><span class="tt-label">href=</span>"${escapeHtml(href)}"</div>
     ${fnText ? `<div class="tt-row">${escapeHtml(fnText)}${fnText.length >= 80 ? '…' : ''}</div>` : ''}
   `;
-  badgeTooltip.style.display = 'block';
+  badgeTooltip.hidden = false;
 
+  // .tip is position:fixed, so these are viewport coordinates — no scroll offset
   const rect = badge.getBoundingClientRect();
   const ttW = badgeTooltip.offsetWidth;
   const ttH = badgeTooltip.offsetHeight;
 
-  let left = rect.left + window.scrollX;
-  let top  = rect.bottom + window.scrollY + 6;
+  let left = rect.left;
+  let top  = rect.bottom + 6;
 
-  if (left + ttW > window.scrollX + window.innerWidth) left = window.scrollX + window.innerWidth - ttW - 8;
-  if (rect.bottom + ttH > window.innerHeight) top = rect.top + window.scrollY - ttH - 6; // flip above
+  if (left + ttW > window.innerWidth) left = window.innerWidth - ttW - 8;
+  if (left < 8) left = 8;
+  if (top + ttH > window.innerHeight) top = rect.top - ttH - 6; // flip above
 
   badgeTooltip.style.left = left + 'px';
   badgeTooltip.style.top  = top + 'px';
 }
 function hideTooltip() {
-  badgeTooltip.style.display = 'none';
+  badgeTooltip.hidden = true;
 }
 
 /* ── DELETE LINK ──
@@ -772,11 +804,12 @@ function openChangeModal(num) {
   changeTargetNum = num;
   changeSearchInput.value = '';
   renderChangeList('');
-  changeModal.style.display = 'flex';
+  changeModalSel.textContent = `Sup ${num} → pick a footnote`;
+  changeModal.hidden = false;
   changeSearchInput.focus();
 }
 function closeChangeModal() {
-  changeModal.style.display = 'none';
+  changeModal.hidden = true;
   changeTargetNum = null;
 }
 function renderChangeList(filter) {
@@ -946,8 +979,10 @@ btnDownload.addEventListener('click', () => {
 btnCopyFile.addEventListener('click', () => {
   if (!state.processedContent) { toast('Nothing to copy yet.', 'error'); return; }
 
-  const originalLabel = 'Copy';
-  btnCopyFile.textContent = 'Copying...';
+  // Only swap the label span — the lucide icon node must survive
+  const label = btnCopyFile.querySelector('span');
+  const originalLabel = label.textContent;
+  label.textContent = 'Copying…';
   btnCopyFile.disabled = true;
 
   navigator.clipboard.writeText(state.processedContent)
@@ -955,7 +990,7 @@ btnCopyFile.addEventListener('click', () => {
     .catch(() => toast('Copy failed. Try downloading instead.', 'error'))
     .finally(() => {
       setTimeout(() => {
-        btnCopyFile.textContent = originalLabel;
+        label.textContent = originalLabel;
         btnCopyFile.disabled = false;
       }, 1000);
     });
@@ -963,38 +998,56 @@ btnCopyFile.addEventListener('click', () => {
 
 /* ── PROGRESS ANIMATION ── */
 function animateProgress(callback) {
-  progressBar.style.width = '0%';
-  progressWrap.style.visibility = 'visible';
+  const setPct = (p) => {
+    progressFill.style.width = p + '%';
+    progressPct.textContent  = Math.round(p) + '%';
+  };
+
+  setPct(0);
+  progressWrap.hidden = false;
   btnProcess.disabled = true;
+
   let pct = 0;
   const iv = setInterval(() => {
     pct += Math.random() * 25;
     if (pct >= 90) { clearInterval(iv); pct = 90; }
-    progressBar.style.width = pct + '%';
+    setPct(pct);
   }, 80);
 
   setTimeout(() => {
     clearInterval(iv);
-    progressBar.style.width = '100%';
+    setPct(100);
     callback();
     setTimeout(() => {
-      progressBar.style.width = '0%';
-      progressWrap.style.visibility = 'hidden';
+      progressWrap.hidden = true;
+      setPct(0);
       btnProcess.disabled = false;
     }, 600);
   }, 500);
 }
 
 /* ── TOAST ── */
+const TOAST_ICONS = { success: 'check-circle-2', error: 'alert-circle', warning: 'alert-triangle' };
+
 function toast(msg, type = 'success') {
   const el = document.createElement('div');
   el.className = `toast ${type}`;
-  el.textContent = msg;
+  el.innerHTML = `<i class="t-icon" data-lucide="${TOAST_ICONS[type] || 'info'}"></i>` +
+                 `<span class="t-msg"></span>`;
+  el.querySelector('.t-msg').textContent = msg;
   toastStack.appendChild(el);
+  drawIcons();
 
   // Keep at most 3 stacked — drop the oldest
   while (toastStack.children.length > 3) toastStack.firstElementChild.remove();
 
-  setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity 0.3s'; }, 3700);
-  setTimeout(() => el.remove(), 4000);
+  const dismiss = () => {
+    el.classList.add('out');
+    setTimeout(() => el.remove(), 240);
+  };
+  el.addEventListener('click', dismiss);
+  setTimeout(dismiss, 4000);
 }
+
+/* ── BOOT ── */
+drawIcons();

@@ -1,140 +1,198 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>EPUB Tool Suite</title>
+<title>Footnote Linker Internal</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%232B3A9C' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M9 17H7A5 5 0 0 1 7 7h2'/><path d='M15 7h2a5 5 0 1 1 0 10h-2'/><line x1='8' y1='12' x2='16' y2='12'/></svg>" />
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700;800&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
 
+<!-- ============ TOASTS ============ -->
+<div class="toast-stack" id="toastStack" aria-live="polite"></div>
+
+<!-- ============ HOVER TOOLTIP ============ -->
+<div class="tip" id="badgeTooltip" hidden role="tooltip"></div>
+
 <div class="layout">
 
-  <!-- SIDEBAR -->
+  <!-- ============ SIDEBAR ============ -->
   <aside class="sidebar">
+
     <div class="brand">
-      <img src="logo.webp" alt="VilPower" class="brand-logo" id="brandLogo" onerror="this.style.display='none';document.getElementById('brandFallback').style.display='block'"/>
-      <div class="brand-text" id="brandFallback" style="display:none">
-        <div class="brand-name">VilPower</div>
-        <div class="brand-sub">QC Suite</div>
-      </div>
+      <span class="brand-mark"><i data-lucide="link-2"></i></span>
+      <span class="brand-text">
+        <strong>Footnote Linker</strong>
+        <small>EPUB QC Tool</small>
+      </span>
     </div>
 
-    <nav class="tool-nav">
-      <div class="nav-label">TOOLS</div>
-      <button class="tab-btn active" data-tab="1">
-        <span class="nav-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
-        </span>
-        <span class="nav-text">Footnote Linker Internal</span>
-      </button>
-      <button class="tab-btn" data-tab="2">
-        <span class="nav-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 8h18"/><path d="M6 3h12a2 2 0 0 1 2 2v1H4V5a2 2 0 0 1 2-2z"/><path d="M4 12h16v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg>
-        </span>
-        <span class="nav-text">Pagebreak Fixer</span>
-      </button>
-      <button class="tab-btn" data-tab="3">
-        <span class="nav-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>
-        </span>
-        <span class="nav-text">TOC Linker</span>
-      </button>
-    </nav>
+    <div class="steps">
+
+      <!-- STEP 1 -->
+      <div class="step" id="step1">
+        <div class="step-head">
+          <span class="step-num">1</span>
+          <span class="step-title">Upload XHTML File</span>
+          <span class="step-check" id="fileCheck"><i data-lucide="check"></i></span>
+        </div>
+        <button class="step-btn" id="pickFile">
+          <i data-lucide="file-code" class="lg"></i>
+          <span class="step-btn-text" id="fileBtnText">Choose File</span>
+          <i data-lucide="chevron-right" class="step-btn-arrow"></i>
+        </button>
+        <input type="file" id="fileInput1" accept=".xhtml,.html,.xml" hidden/>
+        <div class="step-status" id="fileStatus">Chapter file with footnotes</div>
+      </div>
+
+      <!-- STEP 2 -->
+      <div class="step" id="step2">
+        <div class="step-head">
+          <span class="step-num">2</span>
+          <span class="step-title">ID Prefix</span>
+          <span class="step-check" id="prefixCheck"><i data-lucide="check"></i></span>
+        </div>
+        <div class="field" id="prefixField">
+          <i data-lucide="hash" class="field-icon"></i>
+          <input type="text" id="prefixInput" placeholder="e.g. ch3" autocomplete="off" spellcheck="false"/>
+        </div>
+        <div class="step-status" id="prefixStatus">Auto-detected from filename. Edit if needed.</div>
+      </div>
+
+    </div>
 
     <div class="sidebar-foot">
-      <span class="version-text">v1.2.0</span>
+
+      <div class="progress-wrap" id="progressWrap" hidden>
+        <div class="progress-label">
+          <span id="progressText">Linking footnotes</span>
+          <span id="progressPct">0%</span>
+        </div>
+        <div class="progress-track" role="progressbar" aria-labelledby="progressText">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+      </div>
+
+      <button class="btn-run" id="btnProcess" disabled>
+        <i data-lucide="play"></i>
+        <span>Process File</span>
+      </button>
+
+      <button class="theme-btn" id="themeToggle" aria-label="Toggle color theme">
+        <i data-lucide="moon" id="themeIcon"></i>
+        <span id="themeLabel">Dark mode</span>
+      </button>
+
     </div>
   </aside>
 
-  <!-- MAIN -->
+  <!-- ============ MAIN ============ -->
   <main class="main">
 
-    <!-- TOP BAR -->
-    <header class="top-bar">
-      <h1 class="top-title" id="topTitle">Footnote Linker Internal</h1>
-      <div class="top-actions">
-        <button class="icon-btn" id="themeToggle" title="Toggle theme" aria-label="Toggle theme">🌙</button>
-        <button class="icon-btn" id="settingsBtn" title="Settings" aria-label="Settings">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.35.4.65.73.85.3.19.65.29 1 .29H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        </button>
-      </div>
-    </header>
+    <!-- tab bar -->
+    <div class="tab-bar">
+      <button class="tab-btn active" id="tabBtn1" data-tab="1">
+        <i data-lucide="link-2"></i><span class="tab-text">Footnote Linker Internal</span>
+      </button>
+      <button class="tab-btn" id="tabBtn2" data-tab="2">
+        <i data-lucide="book-open"></i><span class="tab-text">Pagebreak Fixer</span>
+      </button>
+      <button class="tab-btn" id="tabBtn3" data-tab="3">
+        <i data-lucide="list-tree"></i><span class="tab-text">TOC Linker</span>
+      </button>
+    </div>
 
-    <!-- TAB 1: FOOTNOTE LINKER -->
-    <div class="tab-pane active" id="tabPane1">
+    <!-- ============ TAB 1 PANE ============ -->
+    <div class="tab-pane" id="tabPane1">
 
-      <!-- Empty state = full canvas drop zone -->
-      <div class="drop-canvas" id="emptyState1">
-        <div class="drop-zone" id="dropZone" tabindex="0" role="button" aria-label="Drop XHTML file here or click to browse">
-          <svg class="drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M12 3v13"/><path d="m7 8 5-5 5 5"/></svg>
-          <div class="drop-title">Drop XHTML file here or click to browse</div>
-          <div class="drop-desc">Adds two-way anchor links between superscripts and footnotes.<br/>Accepts .xhtml, .html and .xml</div>
-          <input type="file" id="fileInput1" accept=".xhtml,.html,.xml" hidden/>
+      <!-- summary bar -->
+      <div class="summary-bar" id="summaryBar" hidden>
+        <div class="stat total">
+          <span class="stat-num" id="statSupsFound">0</span>
+          <span class="stat-label">Sups Found</span>
+        </div>
+        <div class="stat total">
+          <span class="stat-num" id="statFnFound">0</span>
+          <span class="stat-label">Footnotes Found</span>
+        </div>
+        <div class="stat pass">
+          <span class="stat-num" id="statMatched">0</span>
+          <span class="stat-label">Matched</span>
+        </div>
+        <div class="stat fail">
+          <span class="stat-num" id="statUnmatched">0</span>
+          <span class="stat-label">Unmatched</span>
+        </div>
+        <div class="summary-actions">
+          <button class="btn-ghost" id="btnCopyFile"><i data-lucide="copy"></i><span>Copy</span></button>
+          <button class="btn-save" id="btnDownload"><i data-lucide="save"></i><span>Download File</span></button>
         </div>
       </div>
 
-      <!-- Workspace (shown after file loaded) -->
-      <div class="workspace" id="workspace1" style="display:none">
+      <!-- file title bar -->
+      <div class="file-bar" id="fileBar" hidden>
+        <i data-lucide="file-text"></i>
+        <span class="file-title" id="fileTitleDisplay">filename.xhtml</span>
+      </div>
 
-        <!-- Sticky top strip -->
-        <div class="file-strip">
-          <div class="strip-file">
-            <span class="file-icon" aria-hidden="true">📄</span>
-            <span class="file-title" id="fileTitleDisplay">filename.xhtml</span>
-          </div>
+      <!-- empty state (before upload) -->
+      <div class="main-body" id="emptyState1">
+        <div class="empty-state">
+          <span class="empty-icon"><i data-lucide="link-2"></i></span>
+          <h2>Nothing linked yet</h2>
+          <p>Upload the chapter XHTML file, confirm the ID prefix, then run Process.
+             Each body superscript is wired two ways to its matching footnote anchor.</p>
+          <span class="empty-hint">
+            <i data-lucide="arrow-left"></i> Start with step 1 in the sidebar
+          </span>
+        </div>
+      </div>
 
-          <div class="strip-pills">
-            <div class="pill"><span class="pill-num" id="statSupsFound">0</span><span class="pill-label">Sups</span></div>
-            <div class="pill"><span class="pill-num" id="statFnFound">0</span><span class="pill-label">Footnotes</span></div>
-            <div class="pill pill-pass"><span class="pill-num" id="statMatched">0</span><span class="pill-label">Matched</span></div>
-            <div class="pill pill-fail"><span class="pill-num" id="statUnmatched">0</span><span class="pill-label">Unmatched</span></div>
-          </div>
+      <!-- workspace (after upload) -->
+      <div class="workspace" id="workspace1" hidden>
 
-          <div class="strip-right">
-            <label class="prefix-row">
-              <span class="prefix-label">Prefix</span>
-              <input type="text" id="prefixInput" class="prefix-input" placeholder="e.g. ch3" value=""/>
-            </label>
-
-            <div class="segmented" role="tablist">
-              <button class="inner-tab-btn active" data-inner-tab="main">Preview</button>
-              <button class="inner-tab-btn" data-inner-tab="summary">Summary</button>
-            </div>
-
-            <button class="btn-run" id="btnProcess">▶ Process</button>
-          </div>
+        <!-- inner tabs -->
+        <div class="inner-tab-bar">
+          <button class="inner-tab-btn active" data-inner-tab="main">
+            <i data-lucide="file-text"></i><span>Main</span>
+          </button>
+          <button class="inner-tab-btn" data-inner-tab="summary">
+            <i data-lucide="list-checks"></i><span>Summary</span>
+          </button>
         </div>
 
-        <!-- Progress bar under strip -->
-        <div class="progress-wrap" id="progressWrap">
-          <div class="progress-bar" id="progressBar"></div>
-        </div>
-
-        <!-- INNER TAB: PREVIEW -->
+        <!-- INNER TAB: MAIN -->
         <div class="inner-tab-pane active" id="innerPaneMain">
-          <div class="doc-preview" id="docPreview"></div>
+          <div class="doc-panel">
+            <div class="doc-preview preview-doc" id="docPreview"></div>
+          </div>
         </div>
 
         <!-- INNER TAB: SUMMARY -->
         <div class="inner-tab-pane" id="innerPaneSummary">
           <div class="summary-toolbar">
-            <button class="btn-secondary" id="btnCopyChanges">Copy Changes</button>
-            <button class="btn-secondary" id="btnDownloadReport">Download Report</button>
+            <button class="btn-ghost" id="btnCopyChanges"><i data-lucide="clipboard-list"></i><span>Copy Changes</span></button>
+            <button class="btn-ghost" id="btnDownloadReport"><i data-lucide="table"></i><span>Download Report</span></button>
           </div>
           <div class="split-preview">
             <div class="preview-panel">
-              <div class="panel-header">
-                <span class="panel-badge body-badge">BODY</span>
-                Superscripts
+              <div class="panel-head">
+                <i data-lucide="type"></i>
+                <span class="panel-title">Body Superscripts</span>
+                <span class="panel-sub"><span class="panel-badge body-badge">BODY</span></span>
               </div>
               <div class="panel-list" id="bodySupsList"></div>
             </div>
-            <div class="preview-divider"></div>
             <div class="preview-panel">
-              <div class="panel-header">
-                <span class="panel-badge fn-badge">FOOTNOTES</span>
-                Footnote Anchors
+              <div class="panel-head">
+                <i data-lucide="anchor"></i>
+                <span class="panel-title">Footnote Anchors</span>
+                <span class="panel-sub"><span class="panel-badge fn-badge">FOOTNOTES</span></span>
               </div>
               <div class="panel-list" id="footnotesList"></div>
             </div>
@@ -142,61 +200,59 @@
         </div>
 
       </div>
+    </div><!-- /tabPane1 -->
 
-      <!-- Floating download dock -->
-      <div class="download-dock" id="sidebarDownload" style="display:none">
-        <button class="btn-copy-file" id="btnCopyFile">Copy</button>
-        <button class="btn-download" id="btnDownload">⬇ Download Fixed File</button>
+    <!-- ============ TAB 2 PANE ============ -->
+    <div class="tab-pane" id="tabPane2" hidden>
+      <div class="main-body">
+        <div class="empty-state">
+          <span class="empty-icon"><i data-lucide="book-open"></i></span>
+          <h2>Pagebreak Fixer</h2>
+          <span class="empty-tag">In development</span>
+          <p>Will normalise <code>epub:type="pagebreak"</code> markers across a chapter —
+             repairing missing IDs, out-of-order page numbers and duplicate breaks.</p>
+        </div>
       </div>
     </div>
 
-    <!-- TAB 2: PAGEBREAK FIXER -->
-    <div class="tab-pane" id="tabPane2">
-      <div class="empty-state">
-        <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 8h18"/><path d="M6 3h12a2 2 0 0 1 2 2v1H4V5a2 2 0 0 1 2-2z"/><path d="M4 12h16v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg>
-        <div class="empty-title">Pagebreak Fixer</div>
-        <div class="empty-tag">In development</div>
-        <div class="empty-desc">Will normalise <code>epub:type="pagebreak"</code> markers — repairing missing IDs, out-of-order page numbers and duplicate breaks across a chapter.</div>
-      </div>
-    </div>
-
-    <!-- TAB 3: TOC LINKER -->
-    <div class="tab-pane" id="tabPane3">
-      <div class="empty-state">
-        <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>
-        <div class="empty-title">TOC Linker</div>
-        <div class="empty-tag">In development</div>
-        <div class="empty-desc">Will build and validate <code>nav.xhtml</code> entries against chapter headings, flagging broken or orphaned table-of-contents targets.</div>
+    <!-- ============ TAB 3 PANE ============ -->
+    <div class="tab-pane" id="tabPane3" hidden>
+      <div class="main-body">
+        <div class="empty-state">
+          <span class="empty-icon"><i data-lucide="list-tree"></i></span>
+          <h2>TOC Linker</h2>
+          <span class="empty-tag">In development</span>
+          <p>Will build and validate <code>nav.xhtml</code> entries against chapter headings,
+             flagging broken or orphaned table-of-contents targets.</p>
+        </div>
       </div>
     </div>
 
   </main>
 </div>
 
-<!-- Toast -->
-<div class="toast-stack" id="toastStack"></div>
-
-<!-- Badge context menu -->
-<div class="ctx-menu" id="ctxMenu" style="display:none">
-  <button class="ctx-item" id="ctxDelete">Delete</button>
-  <button class="ctx-item" id="ctxChange">Change</button>
+<!-- ============ BADGE CONTEXT MENU ============ -->
+<div class="popup ctx-menu" id="ctxMenu" hidden>
+  <button class="popup-item" id="ctxDelete"><i data-lucide="trash-2"></i><span>Delete</span></button>
+  <button class="popup-item" id="ctxChange"><i data-lucide="repeat"></i><span>Change</span></button>
 </div>
 
-<!-- Badge hover tooltip -->
-<div class="badge-tooltip" id="badgeTooltip" style="display:none"></div>
-
-<!-- Change-footnote modal -->
-<div class="modal-overlay" id="changeModal" style="display:none">
-  <div class="modal-box">
-    <div class="modal-header">
-      <span>Select Footnote</span>
-      <button class="modal-close" id="changeModalClose">✕</button>
+<!-- ============ CHANGE-FOOTNOTE MODAL ============ -->
+<div class="modal-overlay" id="changeModal" hidden>
+  <div class="popup popup-modal">
+    <div class="popup-head">
+      <span class="popup-sel" id="changeModalSel">Select footnote</span>
+      <button class="popup-close" id="changeModalClose" aria-label="Close"><i data-lucide="x"></i></button>
     </div>
-    <input type="text" id="changeSearchInput" class="modal-search" placeholder="Search footnotes..."/>
-    <div class="modal-list" id="changeFnList"></div>
+    <div class="popup-search">
+      <i data-lucide="search"></i>
+      <input type="text" id="changeSearchInput" placeholder="Search footnotes" autocomplete="off" spellcheck="false"/>
+    </div>
+    <div class="popup-list" id="changeFnList"></div>
   </div>
 </div>
 
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
