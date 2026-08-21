@@ -24,49 +24,163 @@
   <!-- ============ SIDEBAR ============ -->
   <aside class="sidebar">
 
-    <div class="brand">
-      <span class="brand-mark"><i data-lucide="link-2"></i></span>
-      <span class="brand-text">
-        <strong>Footnote Linker</strong>
-        <small>EPUB QC Tool</small>
-      </span>
+<div class="brand">
+  <img src="logo.webp" alt="VilPower" class="brand-logo" 
+       onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'"/>
+  <span class="brand-fallback" style="display:none">
+    <span class="brand-mark"><i data-lucide="link-2"></i></span>
+    <span class="brand-text">
+      <strong>Footnote Linker</strong>
+      <small>EPUB QC Tool</small>
+    </span>
+  </span>
+</div>
+
+    <!-- TAB 1 SIDEBAR — Footnote Linker -->
+    <div class="sidebar-steps" data-for-tab="1">
+      <div class="steps">
+
+        <!-- STEP 1 -->
+        <div class="step" id="step1">
+          <div class="step-head">
+            <span class="step-num">1</span>
+            <span class="step-title">Upload XHTML File</span>
+            <span class="step-check" id="fileCheck"><i data-lucide="check"></i></span>
+          </div>
+          <button class="step-btn" id="pickFile">
+            <i data-lucide="file-code" class="lg"></i>
+            <span class="step-btn-text" id="fileBtnText">Choose File</span>
+            <i data-lucide="chevron-right" class="step-btn-arrow"></i>
+          </button>
+          <input type="file" id="fileInput1" accept=".xhtml,.html,.xml" hidden/>
+          <div class="step-status" id="fileStatus">Chapter file with footnotes</div>
+        </div>
+
+        <!-- STEP 2 -->
+        <div class="step" id="step2">
+          <div class="step-head">
+            <span class="step-num">2</span>
+            <span class="step-title">ID Prefix</span>
+            <span class="step-check" id="prefixCheck"><i data-lucide="check"></i></span>
+          </div>
+          <div class="field" id="prefixField">
+            <i data-lucide="hash" class="field-icon"></i>
+            <input type="text" id="prefixInput" placeholder="e.g. ch3" autocomplete="off" spellcheck="false"/>
+          </div>
+          <div class="step-status" id="prefixStatus">Auto-detected from filename. Edit if needed.</div>
+        </div>
+
+      </div>
     </div>
 
-    <div class="steps">
+    <!-- TAB 2 SIDEBAR — Pagebreak Fixer -->
+    <div class="sidebar-steps" data-for-tab="2" hidden>
+      <div class="steps">
 
-      <!-- STEP 1 -->
-      <div class="step" id="step1">
-        <div class="step-head">
-          <span class="step-num">1</span>
-          <span class="step-title">Upload XHTML File</span>
-          <span class="step-check" id="fileCheck"><i data-lucide="check"></i></span>
+        <!-- STEP 1: Upload External Footnote File -->
+        <div class="step" id="extStep1">
+          <div class="step-head">
+            <span class="step-num">1</span>
+            <span class="step-title">External Footnote File</span>
+            <span class="step-check" id="extFileCheck"><i data-lucide="check"></i></span>
+          </div>
+          <button class="step-btn" id="pickExtFile">
+            <i data-lucide="file-code" class="lg"></i>
+            <span class="step-btn-text" id="extFileBtnText">Choose File</span>
+            <i data-lucide="chevron-right" class="step-btn-arrow"></i>
+          </button>
+          <input type="file" id="extFileInput" accept=".xhtml,.html,.xml" hidden/>
+          <div class="step-status" id="extFileStatus">External notes/appendix XHTML file</div>
         </div>
-        <button class="step-btn" id="pickFile">
-          <i data-lucide="file-code" class="lg"></i>
-          <span class="step-btn-text" id="fileBtnText">Choose File</span>
-          <i data-lucide="chevron-right" class="step-btn-arrow"></i>
-        </button>
-        <input type="file" id="fileInput1" accept=".xhtml,.html,.xml" hidden/>
-        <div class="step-status" id="fileStatus">Chapter file with footnotes</div>
+
+        <!-- STEP 1b: ID Prefix verify (shown after file upload) -->
+        <div class="step" id="extPrefixStep" hidden>
+          <div class="step-head">
+            <span class="step-num" style="font-size:0.7rem">1b</span>
+            <span class="step-title">Verify ID Prefix</span>
+            <span class="step-check" id="extPrefixCheck"><i data-lucide="check"></i></span>
+          </div>
+          <div class="field" id="extPrefixField">
+            <i data-lucide="hash" class="field-icon"></i>
+            <input type="text" id="extPrefixInput" placeholder="e.g. app1" autocomplete="off" spellcheck="false"/>
+          </div>
+          <div class="step-status" id="extPrefixStatus">Auto-detected from file. Edit if needed.</div>
+          <button class="step-btn" id="btnConfirmPrefix" style="margin-top:8px">
+            <i data-lucide="check-circle" class="lg"></i>
+            <span class="step-btn-text">Confirm Prefix</span>
+            <i data-lucide="chevron-right" class="step-btn-arrow"></i>
+          </button>
+        </div>
+
+        <!-- STEP 2: Select Chapter Section -->
+        <div class="step" id="extStep2" hidden>
+          <div class="step-head">
+            <span class="step-num">2</span>
+            <span class="step-title">Select Chapter Section</span>
+            <span class="step-check" id="extSectionCheck"><i data-lucide="check"></i></span>
+          </div>
+          <div class="field" id="extSectionField">
+            <i data-lucide="list-tree" class="field-icon"></i>
+            <select id="extSectionSelect" style="border:none;background:transparent;width:100%;outline:none;font-size:0.85rem;color:var(--text)">
+              <option value="">-- Select section --</option>
+            </select>
+          </div>
+          <div class="step-status" id="extSectionStatus">Sections detected from file</div>
+        </div>
+
+        <!-- STEP 3: Upload Chapter Body File -->
+        <div class="step" id="extStep3" hidden>
+          <div class="step-head">
+            <span class="step-num">3</span>
+            <span class="step-title">Chapter Body File</span>
+            <span class="step-check" id="extBodyCheck"><i data-lucide="check"></i></span>
+          </div>
+          <button class="step-btn" id="pickBodyFile">
+            <i data-lucide="file-code" class="lg"></i>
+            <span class="step-btn-text" id="bodyFileBtnText">Choose File</span>
+            <i data-lucide="chevron-right" class="step-btn-arrow"></i>
+          </button>
+          <input type="file" id="bodyFileInput" accept=".xhtml,.html,.xml" hidden/>
+          <div class="step-status" id="bodyFileStatus">Chapter XHTML file with superscripts</div>
+        </div>
+
       </div>
-
-      <!-- STEP 2 -->
-      <div class="step" id="step2">
-        <div class="step-head">
-          <span class="step-num">2</span>
-          <span class="step-title">ID Prefix</span>
-          <span class="step-check" id="prefixCheck"><i data-lucide="check"></i></span>
-        </div>
-        <div class="field" id="prefixField">
-          <i data-lucide="hash" class="field-icon"></i>
-          <input type="text" id="prefixInput" placeholder="e.g. ch3" autocomplete="off" spellcheck="false"/>
-        </div>
-        <div class="step-status" id="prefixStatus">Auto-detected from filename. Edit if needed.</div>
-      </div>
-
     </div>
 
-    <div class="sidebar-foot">
+    <!-- TAB 3 SIDEBAR — Reference Linker Ext -->
+    <div class="sidebar-steps" data-for-tab="3" hidden>
+      <div class="steps">
+        <div class="step">
+          <div class="step-head">
+            <span class="step-num">1</span>
+            <span class="step-title">Upload NAV File</span>
+          </div>
+          <button class="step-btn" id="pickFileTab3">
+            <i data-lucide="file-code" class="lg"></i>
+            <span class="step-btn-text" id="fileBtnTextTab3">Choose NAV File</span>
+            <i data-lucide="chevron-right" class="step-btn-arrow"></i>
+          </button>
+          <input type="file" id="fileInput3" accept=".xhtml,.html,.xml" hidden/>
+          <div class="step-status">nav.xhtml from your EPUB</div>
+        </div>
+        <div class="step">
+          <div class="step-head">
+            <span class="step-num">2</span>
+            <span class="step-title">Upload Chapter Files</span>
+          </div>
+          <button class="step-btn" id="pickChaptersTab3">
+            <i data-lucide="files" class="lg"></i>
+            <span class="step-btn-text">Choose Chapters</span>
+            <i data-lucide="chevron-right" class="step-btn-arrow"></i>
+          </button>
+          <input type="file" id="fileInput3b" accept=".xhtml,.html,.xml" multiple hidden/>
+          <div class="step-status">One or more chapter XHTML files</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 1 FOOT -->
+    <div class="sidebar-foot" data-foot-tab="1">
 
       <div class="progress-wrap" id="progressWrap" hidden>
         <div class="progress-label">
@@ -83,11 +197,28 @@
         <span>Process File</span>
       </button>
 
+    </div>
+
+    <!-- TAB 2 FOOT -->
+    <div class="sidebar-foot" data-foot-tab="2" hidden>
+      <button class="btn-run" id="btnProcessExt" disabled>
+        <i data-lucide="play"></i><span>Process File</span>
+      </button>
+    </div>
+
+    <!-- TAB 3 FOOT -->
+    <div class="sidebar-foot" data-foot-tab="3" hidden>
+      <button class="btn-run" disabled>
+        <i data-lucide="play"></i><span>Coming Soon</span>
+      </button>
+    </div>
+
+    <!-- SHARED: theme toggle -->
+    <div class="sidebar-theme">
       <button class="theme-btn" id="themeToggle" aria-label="Toggle color theme">
         <i data-lucide="moon" id="themeIcon"></i>
         <span id="themeLabel">Dark mode</span>
       </button>
-
     </div>
   </aside>
 
@@ -100,10 +231,10 @@
         <i data-lucide="link-2"></i><span class="tab-text">Footnote Linker Internal</span>
       </button>
       <button class="tab-btn" id="tabBtn2" data-tab="2">
-        <i data-lucide="book-open"></i><span class="tab-text">Pagebreak Fixer</span>
+        <i data-lucide="external-link"></i><span class="tab-text">Footnote Link External</span>
       </button>
       <button class="tab-btn" id="tabBtn3" data-tab="3">
-        <i data-lucide="list-tree"></i><span class="tab-text">TOC Linker</span>
+        <i data-lucide="list-tree"></i><span class="tab-text">Reference Linker Ext</span>
       </button>
     </div>
 
@@ -206,11 +337,11 @@
     <div class="tab-pane" id="tabPane2" hidden>
       <div class="main-body">
         <div class="empty-state">
-          <span class="empty-icon"><i data-lucide="book-open"></i></span>
-          <h2>Pagebreak Fixer</h2>
+          <span class="empty-icon"><i data-lucide="external-link"></i></span>
+          <h2>Footnote Link External</h2>
           <span class="empty-tag">In development</span>
-          <p>Will normalise <code>epub:type="pagebreak"</code> markers across a chapter —
-             repairing missing IDs, out-of-order page numbers and duplicate breaks.</p>
+          <p>Will link footnotes across external files — connecting body superscripts
+             in one chapter to footnote anchors defined in a separate XHTML file.</p>
         </div>
       </div>
     </div>
@@ -220,7 +351,7 @@
       <div class="main-body">
         <div class="empty-state">
           <span class="empty-icon"><i data-lucide="list-tree"></i></span>
-          <h2>TOC Linker</h2>
+          <h2>Reference Linker Ext</h2>
           <span class="empty-tag">In development</span>
           <p>Will build and validate <code>nav.xhtml</code> entries against chapter headings,
              flagging broken or orphaned table-of-contents targets.</p>
@@ -254,5 +385,6 @@
 
 <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 <script src="app.js"></script>
+<script src="app-external.js"></script>
 </body>
 </html>

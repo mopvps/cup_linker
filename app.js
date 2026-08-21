@@ -102,8 +102,12 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     const tab = btn.dataset.tab;
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-pane').forEach(p => p.hidden = true);
+    document.querySelectorAll('.sidebar-steps').forEach(s => s.hidden = true);
+    document.querySelectorAll('.sidebar-foot[data-foot-tab]').forEach(f => f.hidden = true);
     btn.classList.add('active');
     document.getElementById('tabPane' + tab).hidden = false;
+    document.querySelector(`.sidebar-steps[data-for-tab="${tab}"]`).hidden = false;
+    document.querySelector(`.sidebar-foot[data-foot-tab="${tab}"]`).hidden = false;
   });
 });
 
