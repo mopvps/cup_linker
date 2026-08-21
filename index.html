@@ -153,28 +153,28 @@
         <div class="step">
           <div class="step-head">
             <span class="step-num">1</span>
-            <span class="step-title">Upload NAV File</span>
+            <span class="step-title">Upload Reference File</span>
           </div>
-          <button class="step-btn" id="pickFileTab3">
+          <button class="step-btn" id="rleRefPickBtn">
             <i data-lucide="file-code" class="lg"></i>
-            <span class="step-btn-text" id="fileBtnTextTab3">Choose NAV File</span>
+            <span class="step-btn-text" id="rleRefPickText">Choose Reference File</span>
             <i data-lucide="chevron-right" class="step-btn-arrow"></i>
           </button>
-          <input type="file" id="fileInput3" accept=".xhtml,.html,.xml" hidden/>
-          <div class="step-status">nav.xhtml from your EPUB</div>
+          <input type="file" id="rleRefInput" accept=".xhtml" hidden/>
+          <div class="step-status" id="rleRefStatus">Reference XHTML file</div>
         </div>
         <div class="step">
           <div class="step-head">
             <span class="step-num">2</span>
-            <span class="step-title">Upload Chapter Files</span>
+            <span class="step-title">Upload Chapter File</span>
           </div>
-          <button class="step-btn" id="pickChaptersTab3">
-            <i data-lucide="files" class="lg"></i>
-            <span class="step-btn-text">Choose Chapters</span>
+          <button class="step-btn" id="rleChapterPickBtn">
+            <i data-lucide="file-text" class="lg"></i>
+            <span class="step-btn-text" id="rleChapterPickText">Choose Chapter File</span>
             <i data-lucide="chevron-right" class="step-btn-arrow"></i>
           </button>
-          <input type="file" id="fileInput3b" accept=".xhtml,.html,.xml" multiple hidden/>
-          <div class="step-status">One or more chapter XHTML files</div>
+          <input type="file" id="rleChapterInput" accept=".xhtml" hidden/>
+          <div class="step-status" id="rleChapterStatus">Chapter XHTML file</div>
         </div>
       </div>
     </div>
@@ -348,15 +348,24 @@
 
     <!-- ============ TAB 3 PANE ============ -->
     <div class="tab-pane" id="tabPane3" hidden>
-      <div class="main-body">
+
+      <div class="summary-toolbar" id="refExtToolbar" hidden>
+        <button class="btn-ghost" id="refExtExportBtn"><i data-lucide="download"></i><span>Export XHTML</span></button>
+      </div>
+
+      <div class="main-body" id="refExtEmptyState">
         <div class="empty-state">
-          <span class="empty-icon"><i data-lucide="list-tree"></i></span>
-          <h2>Reference Linker Ext</h2>
-          <span class="empty-tag">In development</span>
-          <p>Will build and validate <code>nav.xhtml</code> entries against chapter headings,
-             flagging broken or orphaned table-of-contents targets.</p>
+          <span class="empty-icon"><i data-lucide="link-2"></i></span>
+          <h2>Nothing loaded yet</h2>
+          <p>Upload a reference file and a chapter file in the sidebar, then select text
+             in the chapter to link it to a matching reference entry.</p>
         </div>
       </div>
+
+      <div class="doc-panel" id="refExtWorkspace" hidden>
+        <div class="doc-preview preview-doc" id="refExtContentArea"></div>
+      </div>
+
     </div>
 
   </main>
@@ -383,8 +392,19 @@
   </div>
 </div>
 
+<!-- ============ REFERENCE LINKER EXT: MATCH POPUP ============ -->
+<div class="popup" id="refExtPopup" hidden>
+  <div class="popup-head">
+    <span class="popup-sel" id="refExtPopupSel">Matches</span>
+    <button class="popup-close" id="refExtPopupClose" aria-label="Close"><i data-lucide="x"></i></button>
+  </div>
+  <div class="popup-list" id="refExtPopupList"></div>
+</div>
+
 <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
 <script src="app.js"></script>
 <script src="app-external.js"></script>
+<script src="reference-linker-ext.js"></script>
 </body>
 </html>
