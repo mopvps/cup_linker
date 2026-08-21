@@ -387,6 +387,9 @@
           <button class="rle-inner-tab-btn" data-rle-tab="back-link">
             <i data-lucide="corner-up-left"></i><span>Back Link</span>
           </button>
+          <button class="rle-inner-tab-btn" data-rle-tab="id-extract">
+            <i data-lucide="scan-search"></i><span>ID Extract</span>
+          </button>
         </div>
 
         <!-- INNER TAB 1: Reference Link -->
@@ -412,6 +415,46 @@
               <span class="empty-tag">Coming Soon</span>
               <p>Two-way backlink generation from reference file to chapter anchors.</p>
             </div>
+          </div>
+        </div>
+
+        <div class="rle-inner-pane" id="rlePane-id-extract">
+          <div class="rle-id-extract-wrap">
+
+            <!-- Toolbar -->
+            <div class="rle-id-extract-toolbar">
+              <button class="btn-ghost" id="rleExtractBtn">
+                <i data-lucide="scan-search"></i><span>Extract IDs</span>
+              </button>
+              <button class="btn-ghost" id="rleExtractCopyBtn" disabled>
+                <i data-lucide="copy"></i><span>Copy Report</span>
+              </button>
+            </div>
+
+            <!-- Empty state -->
+            <div class="rle-id-extract-empty" id="rleExtractEmpty">
+              <div class="empty-state">
+                <span class="empty-icon"><i data-lucide="scan-search"></i></span>
+                <h2>No data yet</h2>
+                <p>Make sure you have loaded a Reference file and selected a Folder, then click Extract IDs.</p>
+              </div>
+            </div>
+
+            <!-- Results table -->
+            <div class="rle-id-extract-results" id="rleExtractResults" hidden>
+              <table class="rle-extract-table" id="rleExtractTable">
+                <thead>
+                  <tr>
+                    <th>Ref ID</th>
+                    <th>Body ID (rref)</th>
+                    <th>Found In</th>
+                    <th>Count</th>
+                  </tr>
+                </thead>
+                <tbody id="rleExtractTbody"></tbody>
+              </table>
+            </div>
+
           </div>
         </div>
 

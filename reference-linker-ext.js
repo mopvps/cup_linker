@@ -31,6 +31,12 @@
   const folderStatus   = document.getElementById('rleFolderStatus');
   const folderCheck    = document.getElementById('rleFolderCheck');
 
+  const extractBtn      = document.getElementById('rleExtractBtn');
+  const extractCopyBtn  = document.getElementById('rleExtractCopyBtn');
+  const extractEmpty    = document.getElementById('rleExtractEmpty');
+  const extractResults  = document.getElementById('rleExtractResults');
+  const extractTbody    = document.getElementById('rleExtractTbody');
+
   if (!refBtn || !chapterBtn || !contentArea) return;
 
   /* ── state ── */
@@ -604,6 +610,135 @@
   function truncate(str, len) {
     return str.length > len ? str.slice(0, len) + '…' : str;
   }
+
+  /* ── ID extract ── */
+  async function runIdExtract() {
+    // Validate prerequisites
+    if (!state.refs.length) {
+      toast('Load a Reference file first (Step 1)', 'error');
+      return;
+    }
+    if (!state.folderFiles.length) {
+      toast('Select a folder first (Step 3)', 'error');
+      return;
+    }
+
+    extractBtn.disabled = true;
+    extractBtn.querySelector('span').textContent = 'Extracting...';
+
+    // Read all folder files content
+    const fileContents = await Promise.all(
+      state.folderFiles.map(file =>
+        new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve({ name: file.name, content: e.target.result });
+          reader.readAsText(file, 'utf-8');
+        })
+      )
+    );
+
+    // For each ref id → add extra r → search folder files
+    const rows = state.refs.map(ref => {
+      const refId  = ref.id;                              // e.g. bm2_ref2
+      const rrefId = refId.replace('_ref', '_rref');      // e.g. bm2_rref2
+
+      const foundIn = fileContents.filter(f =>
+        f.content.includes(`id="${rrefId}"`)
+      ).map(f => f.name);
+
+      return { refId, rrefId, author: ref.author, foundIn };
+    });
+
+    // Render table
+    extractTbody.innerHTML = '';
+
+    rows.forEach(row => {
+      const tr = document.createElement('tr');
+
+      // Ref ID
+      const tdRef = document.createElement('td');
+      tdRef.innerHTML = `<span class="rle-ref-id">${row.refId}</span>`;
+
+      // Body rref ID
+      const tdRref = document.createElement('td');
+      tdRref.innerHTML = `<span class="rle-rref-id">${row.rrefId}</span>`;
+
+      // Found In
+      const tdFiles = document.createElement('td');
+      const filesWrap = document.createElement('div');
+      filesWrap.className = 'rle-found-files';
+
+      if (!row.foundIn.length) {
+        const tag = document.createElement('span');
+        tag.className = 'rle-extract-file-tag not-found';
+        tag.innerHTML = '<i data-lucide="x-circle" style="width:11px;height:11px"></i> Not found';
+        filesWrap.appendChild(tag);
+      } else {
+        row.foundIn.forEach(fname => {
+          const tag = document.createElement('span');
+          tag.className = 'rle-extract-file-tag found';
+          tag.innerHTML = `<i data-lucide="file-text" style="width:11px;height:11px"></i> ${fname}`;
+          filesWrap.appendChild(tag);
+        });
+      }
+      tdFiles.appendChild(filesWrap);
+
+      // Count
+      const tdCount = document.createElement('td');
+      const count = row.foundIn.length;
+      tdCount.innerHTML = `<span class="rle-extract-count ${count === 0 ? 'zero' : ''}">${count}</span>`;
+
+      tr.appendChild(tdRef);
+      tr.appendChild(tdRref);
+      tr.appendChild(tdFiles);
+      tr.appendChild(tdCount);
+      extractTbody.appendChild(tr);
+    });
+
+    // Summary bar
+    const existing = document.querySelector('.rle-extract-summary');
+    if (existing) existing.remove();
+    const total   = rows.length;
+    const found   = rows.filter(r => r.foundIn.length > 0).length;
+    const missing = total - found;
+    const summary = document.createElement('div');
+    summary.className = 'rle-extract-summary';
+    summary.innerHTML = `
+      <span>Total: <strong>${total}</strong></span>
+      <span style="color:var(--pass,#22c55e)">Found: <strong>${found}</strong></span>
+      <span style="color:var(--fail,#ef4444)">Missing: <strong>${missing}</strong></span>
+    `;
+    extractResults.insertBefore(summary, extractResults.firstChild);
+
+    extractEmpty.hidden = true;
+    extractResults.hidden = false;
+    extractCopyBtn.disabled = false;
+
+    extractBtn.disabled = false;
+    extractBtn.querySelector('span').textContent = 'Extract IDs';
+
+    if (window.lucide) lucide.createIcons();
+    toast(`Extracted ${total} IDs — ${found} found, ${missing} missing`, found === total ? 'success' : 'warning');
+  }
+
+  extractCopyBtn.addEventListener('click', () => {
+    const rows = [...extractTbody.querySelectorAll('tr')];
+    const lines = ['Ref ID\tBody ID\tFound In\tCount'];
+    rows.forEach(tr => {
+      const cells = tr.querySelectorAll('td');
+      const refId  = cells[0].textContent.trim();
+      const rrefId = cells[1].textContent.trim();
+      const files  = [...cells[2].querySelectorAll('.rle-extract-file-tag')]
+                       .map(t => t.textContent.trim()).join(', ');
+      const count  = cells[3].textContent.trim();
+      lines.push(`${refId}\t${rrefId}\t${files}\t${count}`);
+    });
+    navigator.clipboard.writeText(lines.join('\n'))
+      .then(() => toast('Report copied to clipboard!', 'success'))
+      .catch(() => toast('Copy failed', 'error'));
+  });
+
+  extractBtn.addEventListener('click', runIdExtract);
 
   // RLE inner tab switching
   document.querySelectorAll('.rle-inner-tab-btn').forEach(btn => {
