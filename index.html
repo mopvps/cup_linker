@@ -176,6 +176,22 @@
           <input type="file" id="rleChapterInput" accept=".xhtml" hidden/>
           <div class="step-status" id="rleChapterStatus">Chapter XHTML file</div>
         </div>
+        <div class="step" id="rleFolderStep">
+          <div class="step-head">
+            <span class="step-num">3</span>
+            <span class="step-title">XHTML Folder</span>
+            <span class="step-check" id="rleFolderCheck"><i data-lucide="check"></i></span>
+          </div>
+          <button class="step-btn" id="rleFolderPickBtn">
+            <i data-lucide="folder-open" class="lg"></i>
+            <span class="step-btn-text" id="rleFolderPickText">Choose Folder</span>
+            <i data-lucide="chevron-right" class="step-btn-arrow"></i>
+          </button>
+          <input type="file" id="rleFolderInput" webkitdirectory mozdirectory multiple hidden/>
+          <div class="step-status" id="rleFolderStatus">
+            Optional for Reference Link · Required for Back Link
+          </div>
+        </div>
       </div>
     </div>
 
@@ -208,8 +224,11 @@
 
     <!-- TAB 3 FOOT -->
     <div class="sidebar-foot" data-foot-tab="3" hidden>
+      <button class="btn-ghost" id="refExtCopyBtn" style="width:100%;justify-content:center;margin-bottom:8px;">
+        <i data-lucide="copy"></i><span>Copy XHTML</span>
+      </button>
       <button class="btn-run" disabled>
-        <i data-lucide="play"></i><span>Coming Soon</span>
+        <i data-lucide="clock"></i><span>Coming Soon</span>
       </button>
     </div>
 
@@ -349,10 +368,6 @@
     <!-- ============ TAB 3 PANE ============ -->
     <div class="tab-pane" id="tabPane3" hidden>
 
-      <div class="summary-toolbar" id="refExtToolbar" hidden>
-        <button class="btn-ghost" id="refExtExportBtn"><i data-lucide="download"></i><span>Export XHTML</span></button>
-      </div>
-
       <div class="main-body" id="refExtEmptyState">
         <div class="empty-state">
           <span class="empty-icon"><i data-lucide="link-2"></i></span>
@@ -362,8 +377,44 @@
         </div>
       </div>
 
-      <div class="doc-panel" id="refExtWorkspace" hidden>
-        <div class="doc-preview preview-doc" id="refExtContentArea"></div>
+      <div id="refExtWorkspace" hidden>
+
+        <!-- INNER TAB BAR -->
+        <div class="rle-inner-tab-bar">
+          <button class="rle-inner-tab-btn active" data-rle-tab="reference-link">
+            <i data-lucide="link-2"></i><span>Reference Link</span>
+          </button>
+          <button class="rle-inner-tab-btn" data-rle-tab="back-link">
+            <i data-lucide="corner-up-left"></i><span>Back Link</span>
+          </button>
+        </div>
+
+        <!-- INNER TAB 1: Reference Link -->
+        <div class="rle-inner-pane active" id="rlePane-reference-link">
+          <div class="rle-main-area">
+            <div class="doc-preview preview-doc" id="refExtContentArea"></div>
+          </div>
+          <div class="rle-sidebar" id="refExtSidebar">
+            <div class="rle-sidebar-head">
+              <span class="rle-sidebar-title">Linked Citations</span>
+              <span class="rle-sidebar-count" id="rleSidebarCount">0</span>
+            </div>
+            <div class="rle-sidebar-body" id="rleSidebarBody"></div>
+          </div>
+        </div>
+
+        <!-- INNER TAB 2: Back Link -->
+        <div class="rle-inner-pane" id="rlePane-back-link">
+          <div class="rle-main-area" style="align-items:center;justify-content:center;display:flex;">
+            <div class="empty-state">
+              <span class="empty-icon"><i data-lucide="corner-up-left"></i></span>
+              <h2>Back Link</h2>
+              <span class="empty-tag">Coming Soon</span>
+              <p>Two-way backlink generation from reference file to chapter anchors.</p>
+            </div>
+          </div>
+        </div>
+
       </div>
 
     </div>
