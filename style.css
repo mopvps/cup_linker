@@ -697,6 +697,11 @@ button:focus-visible,[tabindex]:focus-visible,a:focus-visible,input:focus-visibl
   border-bottom: 1.5px solid var(--rle-yellow);
 }
 .rle-citation.already-linked:hover { filter: brightness(1.1); }
+.rle-year-highlight {
+  background-color: #B3E5FC;
+  border-radius: 2px;
+  padding: 0 2px;
+}
 
 .popup{
   background:var(--surface);

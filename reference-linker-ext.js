@@ -45,7 +45,11 @@
     refs: [],           // [{ id, author, fullText }]
     fuse: null,
     chapterFileName: '',
-    chapterDoc: null,   // parsed XML document of the chapter file
+    chapterDoc: null,   // parsed XML document of the chapter file (preview only)
+    rawChapterText: '', // original file text, untouched
+    rawStrippedText: '', // rawChapterText with existing citation <a> tags unwrapped — export baseline
+    rawMap: null,        // { text, map } — maps rawStrippedText's plain-text offsets to raw char offsets
+    linkEdits: [],   // [{ start, end, openTag, closeTag, id, domAnchor }] — offsets are into rawStrippedText
     savedRange: null,
     undoStack: [],
     popupMode: 'link',      // 'link' | 'change'
@@ -55,7 +59,10 @@
   };
 
   function saveUndoSnapshot() {
-    state.undoStack.push(contentArea.innerHTML);
+    state.undoStack.push({
+      html: contentArea.innerHTML,
+      edits: state.linkEdits.map(({ domAnchor, ...rest }) => rest)
+    });
     if (state.undoStack.length > 50) state.undoStack.shift();
   }
 
@@ -133,6 +140,264 @@
     state.fuse = (typeof Fuse !== 'undefined')
       ? new Fuse(state.refs, { keys: ['author'], threshold: 0.4 })
       : null;
+
+    markValidExistingLinks();
+    linkDomAnchorsToEdits();
+  }
+
+  function markValidExistingLinks() {
+    if (!contentArea) return;
+    contentArea.querySelectorAll('a[href]').forEach(a => {
+      a.classList.remove('rle-citation', 'already-linked');
+      const href = a.getAttribute('href') || '';
+      const hashIdx = href.indexOf('#');
+      if (hashIdx === -1) return;
+      const targetId = href.slice(hashIdx + 1);
+      const isValidRef = state.refs.some(r => r.id === targetId);
+      if (isValidRef) {
+        a.classList.add('rle-citation', 'already-linked');
+      }
+    });
+  }
+
+  /* ── raw-text baseline: rawStrippedText is the export source of truth,
+     never the DOM. Existing citation <a> tags are unwrapped out of it at
+     load time; linkEdits re-wraps text ranges back in at copy time. ── */
+  function buildRawBaseline(raw) {
+    state.rawChapterText = raw;
+    state.linkEdits = [];
+
+    let stripped = '';
+    let lastIndex = 0;
+    const tagRe = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi;
+    let m;
+    while ((m = tagRe.exec(raw))) {
+      const attrs = m[1];
+      const inner = m[2];
+      const hrefMatch = attrs.match(/href\s*=\s*"([^"]*)"/i);
+      const href = hrefMatch ? hrefMatch[1] : '';
+      const hashIdx = href.indexOf('#');
+      const targetId = hashIdx !== -1 ? href.slice(hashIdx + 1) : '';
+      const isValidRef = targetId && state.refs.some(r => r.id === targetId);
+
+      stripped += raw.slice(lastIndex, m.index);
+
+      if (isValidRef) {
+        const idMatch = attrs.match(/\bid\s*=\s*"([^"]*)"/i);
+        const start = stripped.length;
+        stripped += inner;
+        const end = stripped.length;
+        state.linkEdits.push({
+          start, end,
+          openTag: `<a${attrs}>`,
+          closeTag: '</a>',
+          id: idMatch ? idMatch[1] : targetId,
+          domAnchor: null
+        });
+      } else {
+        stripped += m[0];
+      }
+      lastIndex = tagRe.lastIndex;
+    }
+    stripped += raw.slice(lastIndex);
+
+    state.rawStrippedText = stripped;
+    state.rawMap = buildRawTextMap(stripped);
+  }
+
+  function buildRawTextMap(raw) {
+    let text = '';
+    const map = [];
+    const len = raw.length;
+    let i = 0;
+    while (i < len) {
+      const ch = raw[i];
+      if (ch === '<') {
+        const close = raw.indexOf('>', i);
+        if (close === -1) { i = len; break; }
+        i = close + 1;
+        continue;
+      }
+      if (ch === '&') {
+        const semi = raw.indexOf(';', i);
+        if (semi !== -1 && semi - i <= 10) {
+          const decoded = decodeEntity(raw.slice(i, semi + 1));
+          if (decoded !== null) {
+            text += decoded;
+            map.push(i);
+            i = semi + 1;
+            continue;
+          }
+        }
+      }
+      text += ch;
+      map.push(i);
+      i++;
+    }
+    return { text, map };
+  }
+
+  function decodeEntity(entity) {
+    const named = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&apos;': "'", '&#39;': "'" };
+    if (named[entity]) return named[entity];
+    let m = entity.match(/^&#(\d+);$/);
+    if (m) return String.fromCharCode(parseInt(m[1], 10));
+    m = entity.match(/^&#x([0-9a-fA-F]+);$/);
+    if (m) return String.fromCharCode(parseInt(m[1], 16));
+    return null;
+  }
+
+  function renderedTextLength(root, stopNode, stopOffset) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode: (node) => {
+        // Skip text inside injected UI elements — they have no counterpart
+        // in the raw source text and must not count toward offsets
+        if (node.parentElement && node.parentElement.closest('.rle-cite-badge, .rle-year-highlight')) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+
+    let length = 0;
+    let node;
+    while ((node = walker.nextNode())) {
+      if (node === stopNode) {
+        length += stopOffset;
+        break;
+      }
+      length += node.nodeValue.length;
+    }
+    return length;
+  }
+
+  // Char offset of a Range's boundaries within contentArea's rendered text
+  function renderedOffsetOfRange(range) {
+    const start = renderedTextLength(contentArea, range.startContainer, range.startOffset);
+    const end = renderedTextLength(contentArea, range.endContainer, range.endOffset);
+    return { start, end };
+  }
+
+  // Context-matching lookup: searches rawStrippedText directly for the
+  // selected text plus surrounding context, instead of counting DOM chars
+  // (avoids drift from badges, year-highlights, or other injected UI).
+  function findRawOffsets(selectedText, range) {
+    const CONTEXT_LEN = 40;
+
+    const beforeRange = document.createRange();
+    beforeRange.selectNodeContents(contentArea);
+    beforeRange.setEnd(range.startContainer, range.startOffset);
+    const contextBefore = beforeRange.toString().slice(-CONTEXT_LEN);
+
+    const afterRange = document.createRange();
+    afterRange.selectNodeContents(contentArea);
+    afterRange.setStart(range.endContainer, range.endOffset);
+    const contextAfter = afterRange.toString().slice(0, CONTEXT_LEN);
+
+    // Build a regex from plain text that tolerates any inline tags between
+    // characters AND matches HTML entities as their decoded equivalents.
+    // e.g. "Palmer & Synnott" matches "Palmer &#x0026; Synnott" in raw text.
+    function toTagTolerantRegex(str) {
+      const TAG_OR_ENTITY = '(?:<[^>]*>|&[^;]{1,10};)*';
+      return str.split('').map(ch => {
+        if (/\s/.test(ch)) return TAG_OR_ENTITY + '\\s+' + TAG_OR_ENTITY;
+        const esc = ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // Allow the char to appear either literally or as a decimal/hex entity
+        const code = ch.charCodeAt(0);
+        const hex = code.toString(16);
+        const entityAlt = `(?:${esc}|&#${code};|&#[xX]0*${hex};|&amp;)`;
+        return TAG_OR_ENTITY + entityAlt + TAG_OR_ENTITY;
+      }).join('');
+    }
+
+    const BLOCK_CLOSE_RE = /<\/(p|li|h[1-6]|div|td|th|blockquote|section)[^>]*>/i;
+
+    function tryFind(before, sel, after) {
+      const pattern = toTagTolerantRegex(before) +
+                      '(' + toTagTolerantRegex(sel) + ')' +
+                      toTagTolerantRegex(after);
+      let re;
+      try { re = new RegExp(pattern); } catch(e) { return null; }
+      const m = re.exec(state.rawStrippedText);
+      if (!m || !m[1]) return null;
+      const rawStart = m.index + m[0].indexOf(m[1]);
+      const rawEnd = rawStart + m[1].length;
+      // Reject if a block-closing tag falls inside the matched raw range
+      if (BLOCK_CLOSE_RE.test(state.rawStrippedText.slice(rawStart, rawEnd))) return null;
+      return { rawStart, rawEnd };
+    }
+
+    let result = tryFind(contextBefore, selectedText, contextAfter);
+    if (result) return result;
+
+    for (const len of [20, 10, 5, 0]) {
+      result = tryFind(
+        contextBefore.slice(-len),
+        selectedText,
+        contextAfter.slice(0, len)
+      );
+      if (result) return result;
+    }
+
+    return null;
+  }
+
+  function rawOffsetsForRendered(startRendered, endRendered) {
+    const map = state.rawMap.map;
+    const rawStart = map[startRendered] !== undefined ? map[startRendered] : state.rawStrippedText.length;
+    const rawEnd = endRendered < map.length ? map[endRendered] : state.rawStrippedText.length;
+    return { rawStart, rawEnd };
+  }
+
+  function setHrefInOpenTag(openTag, newHref) {
+    if (/href\s*=\s*"[^"]*"/i.test(openTag)) {
+      return openTag.replace(/href\s*=\s*"[^"]*"/i, `href="${newHref}"`);
+    }
+    return openTag.replace(/^<a/i, `<a href="${newHref}"`);
+  }
+
+  // Associate rendered <a> elements in contentArea with their linkEdits entry by id
+  function linkDomAnchorsToEdits() {
+    contentArea.querySelectorAll('a.rle-citation[id]').forEach(a => {
+      const id = a.getAttribute('id');
+      const edit = state.linkEdits.find(e => e.id === id);
+      if (edit) edit.domAnchor = a;
+    });
+  }
+
+  function highlightYears(root) {
+    if (!root) return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode: (node) => {
+        // Skip text inside existing tags/scripts to avoid double-wrapping
+        if (node.parentElement && node.parentElement.closest('.rle-year-highlight')) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        return /\b(1[6-9]\d{2}|20\d{2})\b/.test(node.nodeValue)
+          ? NodeFilter.FILTER_ACCEPT
+          : NodeFilter.FILTER_REJECT;
+      }
+    });
+
+    const textNodes = [];
+    let n;
+    while ((n = walker.nextNode())) textNodes.push(n);
+
+    textNodes.forEach(node => {
+      const frag = document.createDocumentFragment();
+      const parts = node.nodeValue.split(/\b(1[6-9]\d{2}|20\d{2})\b/);
+      parts.forEach((part, i) => {
+        if (i % 2 === 1) {
+          const span = document.createElement('span');
+          span.className = 'rle-year-highlight';
+          span.textContent = part;
+          frag.appendChild(span);
+        } else if (part) {
+          frag.appendChild(document.createTextNode(part));
+        }
+      });
+      node.parentNode.replaceChild(frag, node);
+    });
   }
 
   /* ── chapter file rendering ── */
@@ -144,14 +409,27 @@
 
     const reader = new FileReader();
     reader.onload = () => {
+      buildRawBaseline(reader.result); // export source of truth — never re-derived from the DOM
+
       const doc = parseXhtml(reader.result);
       state.chapterDoc = doc;
       const body = doc ? doc.querySelector('body') : null;
-      contentArea.innerHTML = body ? body.innerHTML : reader.result;
 
-      contentArea.querySelectorAll('a[href]').forEach(a => {
-        a.classList.add('rle-citation', 'already-linked');
-      });
+      contentArea.innerHTML = '';
+      if (body) {
+        Array.from(body.childNodes).forEach(node => {
+          // document.importNode into the main HTML document handles the
+          // XML self-closing-tag serialization mismatch correctly
+          const imported = document.importNode(node, true);
+          contentArea.appendChild(imported);
+        });
+      } else {
+        contentArea.innerHTML = reader.result;
+      }
+
+      markValidExistingLinks();
+      linkDomAnchorsToEdits();
+      highlightYears(contentArea);
 
       chapterStatus.textContent = `${file.name} loaded`;
       chapterStatus.classList.add('ok');
@@ -327,9 +605,14 @@
     linkBtn.addEventListener('click', () => {
       if (state.popupMode === 'change' && state.changingAnchor) {
         saveUndoSnapshot();
-        state.changingAnchor.setAttribute('href', `${state.refFileName}#${item.id}`);
+        const newHref = `${state.refFileName}#${item.id}`;
+        state.changingAnchor.setAttribute('href', newHref);
         state.changingAnchor.classList.remove('linked', 'already-linked');
         state.changingAnchor.classList.add('rle-citation', 'linked');
+
+        const edit = state.linkEdits.find(e => e.domAnchor === state.changingAnchor);
+        if (edit) edit.openTag = setHrefInOpenTag(edit.openTag, newHref);
+
         toast(`Citation changed to ${item.author}`, 'success');
         closePopup();
         renderCitationList();
@@ -369,31 +652,52 @@
   function linkSelection(refItem) {
     if (!state.savedRange) return;
     try {
+      // Compute raw-text offsets BEFORE the DOM is mutated below — the
+      // rendered text itself is unaffected by wrapping it in an <a>, so
+      // offsets taken now stay valid after insertion.
+      const selectedText = state.savedRange.toString();
+      const offsets = findRawOffsets(selectedText, state.savedRange);
+      if (!offsets) {
+        toast('Could not locate exact position — try re-selecting', 'error');
+        return;
+      }
+      const { rawStart, rawEnd } = offsets;
+
+      const href = `${state.refFileName}#${refItem.id}`;
+      const anchorId = refItem.id.replace('_ref', '_rref');
+
       const a = document.createElement('a');
-      a.setAttribute('href', `${state.refFileName}#${refItem.id}`);
-      a.setAttribute('id', refItem.id.replace('_ref', '_rref'));
+      a.setAttribute('href', href);
+      a.setAttribute('id', anchorId);
       a.classList.add('rle-citation', 'linked');
       saveUndoSnapshot();
-      // extractContents handles cross-element selections unlike surroundContents
-      const fragment = state.savedRange.extractContents();
-      a.appendChild(fragment);
-      state.savedRange.insertNode(a);
 
-      // Clean up empty ghost tags left by extractContents() splitting inline elements
-      const parent = a.parentNode;
-      if (parent) {
-        [...parent.childNodes].forEach(node => {
-          if (
-            node.nodeType === Node.ELEMENT_NODE &&
-            node !== a &&
-            ['B', 'I', 'EM', 'STRONG', 'SPAN', 'U'].includes(node.tagName) &&
-            !node.textContent.trim() &&
-            !node.querySelector('img, br')
-          ) {
-            node.remove();
-          }
-        });
-      }
+      const range = state.savedRange;
+      const fragment = range.extractContents();
+
+      // extractContents() splits inline elements like <b> and <i> at the
+      // selection boundary — the fragment gets a partial <b> wrapper that
+      // produces invalid nesting like <a><b>text</b></a></p></a>.
+      // Fix: unwrap all inline elements inside the fragment so the <a>
+      // tag itself is the only wrapper. The visual styling is preserved
+      // because the parent DOM still has the outer <b>/<i> around the <a>.
+      const INLINE_TAGS = ['B', 'I', 'EM', 'STRONG', 'U', 'SPAN', 'SUP', 'SUB'];
+      (function unwrapInlinesInFragment(node) {
+        // Process children first (bottom-up)
+        [...node.childNodes].forEach(child => unwrapInlinesInFragment(child));
+        if (
+          node.nodeType === Node.ELEMENT_NODE &&
+          INLINE_TAGS.includes(node.tagName) &&
+          node.parentNode
+        ) {
+          const parent = node.parentNode;
+          while (node.firstChild) parent.insertBefore(node.firstChild, node);
+          parent.removeChild(node);
+        }
+      })(fragment);
+
+      a.appendChild(fragment);
+      range.insertNode(a);
 
       // Rescue any pagebreak spans swallowed inside the <a> and move them after it
       const swallowed = [...a.querySelectorAll(
@@ -401,6 +705,15 @@
       )];
       swallowed.forEach(span => {
         a.parentNode.insertBefore(span, a.nextSibling);
+      });
+
+      state.linkEdits.push({
+        start: rawStart,
+        end: rawEnd,
+        openTag: `<a href="${href}" id="${anchorId}">`,
+        closeTag: '</a>',
+        id: anchorId,
+        domAnchor: a
       });
 
       toast(`Linked to ${refItem.author}`, 'success');
@@ -445,7 +758,10 @@
           toast('Nothing to undo', '');
           return;
         }
-        contentArea.innerHTML = state.undoStack.pop();
+        const snap = state.undoStack.pop();
+        contentArea.innerHTML = snap.html;
+        state.linkEdits = snap.edits.map(e => ({ ...e, domAnchor: null }));
+        linkDomAnchorsToEdits();
         renderCitationList();
         toast('Undo successful', 'success');
       }
@@ -538,6 +854,10 @@
         // Remove badge next to this anchor before unlinking
         const nextEl = a.nextElementSibling;
         if (nextEl && nextEl.classList.contains('rle-cite-badge')) nextEl.remove();
+
+        const editIdx = state.linkEdits.findIndex(edit => edit.domAnchor === a);
+        if (editIdx !== -1) state.linkEdits.splice(editIdx, 1);
+
         const text = document.createTextNode(a.textContent);
         a.replaceWith(text);
         toast('Citation unlinked', 'success');
@@ -585,23 +905,23 @@
     }
   }
 
-  /* ── copy ── */
+  /* ── copy ──
+     Export is built by re-wrapping rawStrippedText with linkEdits at their
+     raw offsets — the original file text otherwise untouched. No DOM
+     round-trip (DOMParser/XMLSerializer) — the DOM/contentArea is preview
+     and interaction only, never the export source. */
   copyBtn.addEventListener('click', () => {
-    if (!state.chapterDoc) return;
-    const body = state.chapterDoc.querySelector('body');
-    if (body) body.innerHTML = contentArea.innerHTML;
+    if (!state.rawStrippedText) return;
 
-    // Strip tool-only classes from all citation anchors before export
-    const citations = state.chapterDoc.querySelectorAll('a.rle-citation');
-    citations.forEach(a => {
-      a.classList.remove('rle-citation', 'linked', 'already-linked', 'rle-highlight');
-      // If no classes left, remove the class attribute entirely
-      if (!a.className.trim()) a.removeAttribute('class');
+    const edits = [...state.linkEdits].sort((a, b) => b.start - a.start);
+    let text = state.rawStrippedText;
+    edits.forEach(edit => {
+      text = text.slice(0, edit.start) + edit.openTag
+           + text.slice(edit.start, edit.end) + edit.closeTag
+           + text.slice(edit.end);
     });
-    state.chapterDoc.querySelectorAll('.rle-cite-badge').forEach(b => b.remove());
 
-    const serialized = new XMLSerializer().serializeToString(state.chapterDoc);
-    navigator.clipboard.writeText(serialized)
+    navigator.clipboard.writeText(text)
       .then(() => toast('XHTML copied to clipboard!', 'success'))
       .catch(() => toast('Copy failed — try again', 'error'));
   });
