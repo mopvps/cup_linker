@@ -284,15 +284,26 @@
   function findRawOffsets(selectedText, range) {
     const CONTEXT_LEN = 40;
 
+    // Strip existing <a> citation text and injected UI spans from context
+    // so it matches rawStrippedText (which has citations unwrapped to plain text)
+    function domRangeText(r) {
+      const frag = r.cloneContents();
+      frag.querySelectorAll('.rle-cite-badge').forEach(el => el.remove());
+      frag.querySelectorAll('.rle-year-highlight').forEach(el => {
+        el.replaceWith(document.createTextNode(el.textContent));
+      });
+      return frag.textContent;
+    }
+
     const beforeRange = document.createRange();
     beforeRange.selectNodeContents(contentArea);
     beforeRange.setEnd(range.startContainer, range.startOffset);
-    const contextBefore = beforeRange.toString().slice(-CONTEXT_LEN);
+    const contextBefore = domRangeText(beforeRange).slice(-CONTEXT_LEN);
 
     const afterRange = document.createRange();
     afterRange.selectNodeContents(contentArea);
     afterRange.setStart(range.endContainer, range.endOffset);
-    const contextAfter = afterRange.toString().slice(0, CONTEXT_LEN);
+    const contextAfter = domRangeText(afterRange).slice(0, CONTEXT_LEN);
 
     // Build a regex from plain text that tolerates any inline tags between
     // characters AND matches HTML entities as their decoded equivalents.
@@ -323,8 +334,13 @@
       const rawStart = m.index + m[0].indexOf(m[1]);
       const rawEnd = rawStart + m[1].length;
       // Reject if a block-closing tag falls inside the matched raw range
-      if (BLOCK_CLOSE_RE.test(state.rawStrippedText.slice(rawStart, rawEnd))) return null;
-      return { rawStart, rawEnd };
+      // Only reject if a block-close tag is strictly INSIDE the selection
+      // (not at the very end boundary where the regex may have consumed </p>)
+      const innerSlice = state.rawStrippedText.slice(rawStart, rawEnd);
+      const trimmedSlice = innerSlice.replace(/<\/(p|li|h[1-6]|div|td|th|blockquote|section)[^>]*>\s*$/i, '');
+      const trimmedEnd = rawStart + trimmedSlice.length;
+      if (BLOCK_CLOSE_RE.test(trimmedSlice)) return null;
+      return { rawStart, rawEnd: trimmedEnd };
     }
 
     let result = tryFind(contextBefore, selectedText, contextAfter);
@@ -478,9 +494,11 @@
 
   /* ── select text: open Link popup ── */
   contentArea.addEventListener('mouseup', (e) => {
-    if (e.target.closest('a.rle-citation')) return;
-
     const selection = window.getSelection();
+    const selText = selection ? selection.toString().trim() : '';
+    // Only bail if clicking an existing citation AND nothing is selected
+    if (e.target.closest('a.rle-citation') && !selText) return;
+
     const text = selection ? selection.toString().trim() : '';
     if (!text || selection.rangeCount === 0 || selection.isCollapsed) return;
 
@@ -664,11 +682,9 @@
       const { rawStart, rawEnd } = offsets;
 
       const href = `${state.refFileName}#${refItem.id}`;
-      const anchorId = refItem.id.replace('_ref', '_rref');
 
       const a = document.createElement('a');
       a.setAttribute('href', href);
-      a.setAttribute('id', anchorId);
       a.classList.add('rle-citation', 'linked');
       saveUndoSnapshot();
 
@@ -681,23 +697,58 @@
       // Fix: unwrap all inline elements inside the fragment so the <a>
       // tag itself is the only wrapper. The visual styling is preserved
       // because the parent DOM still has the outer <b>/<i> around the <a>.
+      // Detect inline tags that were split by extractContents() —
+      // these appear in the fragment as elements whose counterpart closing
+      // tag still exists in the DOM immediately after the insertion point.
+      // Strategy: collect any split inline tags from the fragment, keep them
+      // intact inside <a>, then reopen them after </a> in the DOM.
       const INLINE_TAGS = ['B', 'I', 'EM', 'STRONG', 'U', 'SPAN', 'SUP', 'SUB'];
-      (function unwrapInlinesInFragment(node) {
-        // Process children first (bottom-up)
-        [...node.childNodes].forEach(child => unwrapInlinesInFragment(child));
-        if (
-          node.nodeType === Node.ELEMENT_NODE &&
-          INLINE_TAGS.includes(node.tagName) &&
-          node.parentNode
-        ) {
-          const parent = node.parentNode;
-          while (node.firstChild) parent.insertBefore(node.firstChild, node);
-          parent.removeChild(node);
+
+      // Find inline elements at the END of the fragment that were split
+      // (i.e. their tag also exists as an ancestor of range.endContainer
+      //  in the original DOM before extraction).
+      function getTrailingSplitInlines(frag, range) {
+        const split = [];
+        // Walk the last child chain of the fragment
+        let node = frag.lastChild;
+        while (node && node.nodeType === Node.ELEMENT_NODE && INLINE_TAGS.includes(node.tagName)) {
+          split.unshift(node); // outermost first
+          node = node.lastChild;
         }
-      })(fragment);
+        return split;
+      }
+
+      const splitInlines = getTrailingSplitInlines(fragment, range);
 
       a.appendChild(fragment);
       range.insertNode(a);
+
+      // Reopen split inline tags after the <a> so structure is valid:
+      // Before: <i>text <a href="...">et</i></a> al.</i>  (broken)
+      // After:  <i>text <a href="...">et</a></i><i> al.</i>  (valid)
+      if (splitInlines.length) {
+        let insertAfter = a;
+        splitInlines.forEach(inlineEl => {
+          // The DOM already has the remainder of the split inline after <a>
+          // (the part that stayed in the original DOM after extractContents).
+          // We need to close our <a> before it and wrap the remainder.
+          // Find the next sibling inline that matches this tag
+          let sibling = a.nextSibling;
+          while (sibling && !(sibling.nodeType === Node.ELEMENT_NODE && sibling.tagName === inlineEl.tagName)) {
+            sibling = sibling.nextSibling;
+          }
+          if (sibling) {
+            // Move sibling contents into a new inline wrapper after <a>
+            const reopened = document.createElement(inlineEl.tagName.toLowerCase());
+            // Copy attributes (e.g. class, style) from the split element
+            [...inlineEl.attributes].forEach(attr => reopened.setAttribute(attr.name, attr.value));
+            // Move all children of the leftover sibling into reopened
+            while (sibling.firstChild) reopened.appendChild(sibling.firstChild);
+            sibling.parentNode.replaceChild(reopened, sibling);
+            insertAfter = reopened;
+          }
+        });
+      }
 
       // Rescue any pagebreak spans swallowed inside the <a> and move them after it
       const swallowed = [...a.querySelectorAll(
@@ -710,9 +761,9 @@
       state.linkEdits.push({
         start: rawStart,
         end: rawEnd,
-        openTag: `<a href="${href}" id="${anchorId}">`,
+        openTag: `<a href="${href}">`,
         closeTag: '</a>',
-        id: anchorId,
+        id: refItem.id,
         domAnchor: a
       });
 
@@ -920,6 +971,40 @@
            + text.slice(edit.start, edit.end) + edit.closeTag
            + text.slice(edit.end);
     });
+
+    // Fix crossed inline/<a> tag nesting at copy time.
+    // Pattern 1: <b><a href="...">text</b></a>  →  <b><a href="...">text</a></b>
+    // Pattern 2: <a href="...">Poore <i>et</a> al.</i>  →  <a href="...">Poore <i>et</i></a><i> al.</i>
+    const INLINE = 'i|b|em|strong|u|sup|sub';
+
+    // Pattern 1: inline wraps the opening of <a>, closes before </a>
+    // Match is kept tight: [^<]* instead of [\s\S]*? to avoid crossing tags
+    let prev = '';
+    while (prev !== text) {
+      prev = text;
+      const p1 = new RegExp(
+        `(<(${INLINE})(?:\\s[^>]*)?>)(<a\\b[^>]*>)([^<]*(?:<(?!\\/?(?:${INLINE})\\b)[^>]*>[^<]*)*)</(${INLINE})>(</a>)`,
+        'gi'
+      );
+      text = text.replace(p1, (m, openInline, tag1, openA, inner, tag2, closeA) => {
+        if (tag1.toLowerCase() !== tag2.toLowerCase()) return m;
+        return `${openInline}${openA}${inner}</a></${tag2}>`;
+      });
+    }
+
+    // Pattern 2: <a> opens, inline opens inside, <a> closes mid-inline, inline closes after
+    prev = '';
+    while (prev !== text) {
+      prev = text;
+      const p2 = new RegExp(
+        `(<a\\b[^>]*>)([^<]*(?:<(?!\\/?(${INLINE})\\b)[^>]*>[^<]*)*)(<(${INLINE})(?:\\s[^>]*)?>)([^<]*)</a>([^<]*)</(${INLINE})>`,
+        'gi'
+      );
+      text = text.replace(p2, (m, openA, before, _t, openInline, tag1, inside, after, tag2) => {
+        if (tag1.toLowerCase() !== tag2.toLowerCase()) return m;
+        return `${openA}${before}${openInline}${inside}</${tag1}></a><${tag1}>${after}</${tag2}>`;
+      });
+    }
 
     navigator.clipboard.writeText(text)
       .then(() => toast('XHTML copied to clipboard!', 'success'))
