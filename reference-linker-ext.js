@@ -1,6 +1,39 @@
 // Reference Linker Ext — Tab 3 logic (self-contained; does not touch app.js / app-external.js / script.js / format.js)
 (function () {
 
+  // Inject auto-link styles
+  (function injectAutoLinkStyles() {
+    const style = document.createElement('style');
+    style.textContent = `
+      a.rle-auto-linked {
+        background: #ede9fe;
+        color: #5b21b6;
+        border-bottom: 2px solid #7c3aed;
+        border-radius: 2px;
+        padding: 0 1px;
+        cursor: pointer;
+      }
+      .rle-citation-item.auto-linked .rle-sidebar-num {
+        background: #7c3aed;
+      }
+      .rle-citation-item.auto-linked {
+        border-left: 3px solid #7c3aed;
+      }
+      .rle-auto-tag {
+        font-size: 9px;
+        background: #7c3aed;
+        color: #fff;
+        border-radius: 3px;
+        padding: 1px 4px;
+        margin-left: 4px;
+        vertical-align: middle;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+    `;
+    document.head.appendChild(style);
+  })();
+
   /* ── DOM refs ── */
   const refBtn = document.getElementById('rleRefPickBtn');
   const refInput = document.getElementById('rleRefInput');
@@ -16,6 +49,7 @@
   const workspace = document.getElementById('refExtWorkspace');
   const contentArea = document.getElementById('refExtContentArea');
   const copyBtn = document.getElementById('refExtCopyBtn');
+  const autoLinkBtn = document.getElementById('rleAutoLinkBtn');
 
   const popup = document.getElementById('refExtPopup');
   const popupSel = document.getElementById('refExtPopupSel');
@@ -120,6 +154,7 @@
       parseReferenceFile(reader.result);
       refStatus.textContent = `${file.name} — ${state.refs.length} reference${state.refs.length === 1 ? '' : 's'} found`;
       refStatus.classList.add('ok');
+      checkAutoLinkReady();
     };
     reader.readAsText(file);
   });
@@ -132,9 +167,32 @@
       const labelEl = li.querySelector('span.reflabel[id]');
       const id = labelEl ? labelEl.getAttribute('id') : '';
       const fullText = (li.textContent || '').trim().replace(/\s+/g, ' ');
+
+      // Extract year from (YYYY) or (YYYYa) pattern
+      const yearMatch = fullText.match(/\(((19|20)\d{2}[a-z]?)\)/);
+      const year = yearMatch ? yearMatch[1] : '';
+
+      // Extract first surname — word before first comma
+      // Handles particles like "de Vries" by allowing lowercase after capital
+      // fullText starts with empty reflabel span text + possible whitespace
+      // so strip leading non-alpha chars before matching first surname
+      const trimmedFullText = fullText.replace(/^\W+/, '');
+      const firstSurnameMatch = trimmedFullText.match(/^([A-Z][A-Za-záéíóúñ\-]+(?:\s+(?:de|van|von|le|la|du|der|den)\s+[A-Z][A-Za-záéíóúñ\-]+)?)/);
+      const firstSurname = firstSurnameMatch ? firstSurnameMatch[1].trim() : '';
+
+      // Extract second surname (for 2-author refs) — after & or and, before next comma
+      const secondSurnameMatch = fullText.match(/(?:&|and)\s+([A-Z][A-Za-záéíóúñ\-]+(?:\s+(?:de|van|von|le|la|du|der|den)\s+[A-Z][A-Za-záéíóúñ\-]+)?)\s*(?:,|\()/);
+      const secondSurname = secondSurnameMatch ? secondSurnameMatch[1].trim() : '';
+
+      // Count authors by counting ", X." initial patterns
+      const initialMatches = fullText.match(/,\s*[A-Z]\./g) || [];
+      const authorCount = initialMatches.length + 1;
+
+      // Legacy author field for fuse search (keep compatible)
       const authorMatch = fullText.match(/^([^.,]+)[.,]/);
       const author = authorMatch ? authorMatch[1].trim() : fullText.trim();
-      return { id, author, fullText };
+
+      return { id, author, firstSurname, secondSurname, authorCount, year, fullText };
     }).filter(r => r.id);
 
     state.fuse = (typeof Fuse !== 'undefined')
@@ -385,11 +443,17 @@
     if (!root) return;
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
       acceptNode: (node) => {
-        // Skip text inside existing tags/scripts to avoid double-wrapping
+        // Skip inside year-highlight spans (no double-wrap)
         if (node.parentElement && node.parentElement.closest('.rle-year-highlight')) {
           return NodeFilter.FILTER_REJECT;
         }
-        return /\b(1[6-9]\d{2}|20\d{2})\b/.test(node.nodeValue)
+        // Skip inside <a> tags — years there are citation years, not prose dates
+        if (node.parentElement && node.parentElement.closest('a')) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        // Only accept if a standalone year exists (word boundaries both sides)
+        // Must NOT be preceded or followed by a letter (avoids splitting "1991a" mid-token)
+        return /(?<![A-Za-z])\b(1[6-9]\d{2}|20\d{2})\b(?![A-Za-z0-9])/.test(node.nodeValue)
           ? NodeFilter.FILTER_ACCEPT
           : NodeFilter.FILTER_REJECT;
       }
@@ -401,7 +465,8 @@
 
     textNodes.forEach(node => {
       const frag = document.createDocumentFragment();
-      const parts = node.nodeValue.split(/\b(1[6-9]\d{2}|20\d{2})\b/);
+      // Split only on standalone years — not "1991a" (year+letter suffix)
+      const parts = node.nodeValue.split(/((?<![A-Za-z])\b(?:1[6-9]\d{2}|20\d{2})\b(?![A-Za-z0-9]))/);
       parts.forEach((part, i) => {
         if (i % 2 === 1) {
           const span = document.createElement('span');
@@ -453,6 +518,7 @@
       emptyState.hidden = true;
       workspace.hidden = false;
 
+      checkAutoLinkReady();
       renderCitationList();
     };
     reader.readAsText(file);
@@ -853,7 +919,8 @@
 
     citations.forEach((a, i) => {
       const item = document.createElement('div');
-      item.className = 'rle-citation-item';
+      const isAuto = state.linkEdits.find(e => e.domAnchor === a && e.auto);
+      item.className = 'rle-citation-item' + (isAuto ? ' auto-linked' : '');
       item.dataset.citationIndex = i;
 
       // Number badge
@@ -867,7 +934,14 @@
 
       const author = document.createElement('div');
       author.className = 'rle-citation-author';
+      const isAutoItem = state.linkEdits.find(e => e.domAnchor === a && e.auto);
       author.textContent = a.textContent.trim();
+      if (isAutoItem) {
+        const tag = document.createElement('span');
+        tag.className = 'rle-auto-tag';
+        tag.textContent = 'auto';
+        author.appendChild(tag);
+      }
 
       const href = document.createElement('div');
       href.className = 'rle-citation-href';
@@ -961,6 +1035,508 @@
      raw offsets — the original file text otherwise untouched. No DOM
      round-trip (DOMParser/XMLSerializer) — the DOM/contentArea is preview
      and interaction only, never the export source. */
+  function checkAutoLinkReady() {
+    if (state.refs.length && state.rawStrippedText) {
+      autoLinkBtn.hidden = false;
+    }
+  }
+
+  /* ── Auto Linker ── */
+  autoLinkBtn.addEventListener('click', runAutoLink);
+
+  function runAutoLink() {
+    if (!state.refs.length || !state.rawStrippedText) return;
+
+    saveUndoSnapshot();
+    autoLinkBtn.disabled = true;
+    autoLinkBtn.querySelector('span').textContent = 'Linking...';
+
+    // Build lookup: firstSurname (lowercase) → [ref, ...]
+    const refMap = {};
+    state.refs.forEach(ref => {
+      const key = (ref.firstSurname || '').toLowerCase();
+      if (!key) return;
+      if (!refMap[key]) refMap[key] = [];
+      refMap[key].push(ref);
+    });
+
+    function findRef(firstSurname, year) {
+      const candidates = refMap[firstSurname.toLowerCase()] || [];
+      return candidates.find(r => r.year === year)
+          || candidates.find(r => r.fullText.includes(`(${year})`))
+          || null;
+    }
+
+    // Decode HTML entities for matching
+    function decodeForMatch(str) {
+      return str
+        .replace(/&#x0026;/gi, '&').replace(/&amp;/gi, '&')
+        .replace(/&#38;/gi, '&').replace(/&#x26;/gi, '&');
+    }
+
+    // We scan rawStrippedText directly (not decoded) so positions are exact.
+    // The TOKEN_RE handles & written as literal & (after XML parsing into DOM
+    // the chapter content has real & not entities — rawStrippedText is the
+    // serialized original so entities like &#x0026; appear as-is in tags but
+    // the TEXT content between tags is plain after DOMParser import).
+    // BRACKET_RE finds (...) blocks; positions are into rawStrippedText.
+    const rawDecoded = state.rawStrippedText; // use raw directly — no decode needed
+
+    // ── TWO LINKING RULES ──
+    // Rule 1: full citation inside brackets → (Author Year) / (Author et al. Year)
+    // Rule 2: year in brackets, author before → Author (Year) / Author et al. (Year)
+    // Strategy:
+    // Scan A — BRACKET_RE finds (...) blocks → TOKEN_RE inside each block [Rule 1]
+    // Scan B — AUTHOR_YEAR_RE finds Author (Year) patterns directly [Rule 2]
+
+    // Known two-word institutions that appear as "Word1 Word2 Year"
+    // These must be matched as a unit, not split at Word2
+    const TWO_WORD_INSTITUTIONS = [
+      'World Bank', 'World Resources', 'World Wildlife',
+      'United Nations', 'Royal Society'
+    ];
+
+    // Slash-separated acronym institutions: IUCN/UNEP/WWF → last segment used for lookup
+    // Matches: IUCN/UNEP/WWF, FAO/UNEP, etc.
+    const SLASH_ACRONYM_RE = /([A-Z]{2,}(?:\/[A-Z]{2,})+)\s*,?\s*((?:19|20)\d{2}[a-z]?)/g;
+
+    // Two-word institution regex: "World Bank Year", "Royal Society Year"
+    // Built dynamically from the list above
+    const twoWordPattern = TWO_WORD_INSTITUTIONS
+      .map(inst => inst.replace(/\s+/, '\\s+'))
+      .join('|');
+    const TWO_WORD_RE = new RegExp(
+      `(${twoWordPattern})(?:\\s*,)?\\s*((?:19|20)\\d{2}[a-z]?)`,
+      'g'
+    );
+
+    // Main citation TOKEN_RE — matches one citation token inside a bracket block.
+    // Handles:
+    //   Single: "FAO 1991" / "Branch 1983"
+    //   Two-author: "Whitmore & Sayer 1992" / "Palmer & Synnott 1992"
+    //   et al.: "Burghouts et al. 1992" / "Cannon et al 1994"
+    //   Initial prefix: "A. Johns 1992" → skip leading "X. " initials
+    // NOTE: two-word institutions handled separately by TWO_WORD_RE
+    const TOKEN_RE = /(?:[A-Z]\.\s+)?([A-Z][A-Za-záéíóúñ\-]+(?:\s+(?:de|van|von|le|la|du|der|den)\s+[A-Z][A-Za-záéíóúñ\-]+)?(?:(?:\s*(?:&|and)\s*[A-Z][A-Za-záéíóúñ\-]+(?:\s+(?:de|van|von|le|la|du|der|den)\s+[A-Z][A-Za-záéíóúñ\-]+)?)|(?:\s+et\.?\s*al\.?))?|[A-Z]{2,})(?:\s*,)?\s*((?:19|20)\d{2}[a-z]?)/g;
+
+    const alreadyLinked = new Set(
+      [...contentArea.querySelectorAll('a.rle-citation')].map(a => a.getAttribute('href'))
+    );
+
+    const finalMatches = [];
+
+    // Helper: check overlap with existing linkEdits
+    function isOverlapping(rawStart, rawEnd) {
+      return state.linkEdits.some(e =>
+        (rawStart >= e.start && rawStart < e.end) ||
+        (rawEnd > e.start && rawEnd <= e.end)
+      );
+    }
+
+    // Helper: push a match if ref found and not already linked/overlapping
+    function tryPushMatch(rawStart, rawEnd, authorToken, year, blockMatches) {
+      const firstSurnameMatch = authorToken.match(
+        /^([A-Z][A-Za-záéíóúñ\-]+(?:\s+(?:de|van|von|le|la|du|der|den)\s+[A-Z][A-Za-záéíóúñ\-]+)?|[A-Z]{2,})/
+      );
+      if (!firstSurnameMatch) return;
+      const firstSurname = firstSurnameMatch[1];
+
+      const ref = findRef(firstSurname, year);
+      if (!ref) return;
+
+      const href = `${state.refFileName}#${ref.id}`;
+      if (alreadyLinked.has(href)) return;
+      if (isOverlapping(rawStart, rawEnd)) return;
+
+      blockMatches.push({ rawStart, rawEnd, ref, href });
+    }
+
+    // Build a tag-stripped, entity-decoded version of a block string for regex matching.
+    // Returns { clean, cleanToRaw } where cleanToRaw[i] = position in original blockContent.
+    function buildCleanBlock(blockContent) {
+      let clean = '';
+      const cleanToRaw = []; // cleanToRaw[cleanIndex] = rawIndex in blockContent
+      let i = 0;
+      while (i < blockContent.length) {
+        if (blockContent[i] === '<') {
+          // Skip entire tag
+          const close = blockContent.indexOf('>', i);
+          if (close === -1) break;
+          i = close + 1;
+        } else if (blockContent[i] === '&') {
+          const semi = blockContent.indexOf(';', i);
+          if (semi !== -1 && semi - i <= 10) {
+            const entity = blockContent.slice(i, semi + 1);
+            const decoded = decodeEntity(entity);
+            if (decoded !== null) {
+              cleanToRaw.push(i); // map the decoded char to the entity start
+              clean += decoded;
+              i = semi + 1;
+              continue;
+            }
+          }
+          cleanToRaw.push(i);
+          clean += blockContent[i];
+          i++;
+        } else {
+          cleanToRaw.push(i);
+          clean += blockContent[i];
+          i++;
+        }
+      }
+      return { clean, cleanToRaw };
+    }
+
+    // Regex to find parenthesised blocks — non-greedy, no nested parens
+    const BRACKET_RE = /\(([^()]*(?:\([^()]*\)[^()]*)*)\)/g;
+
+    let bm;
+    BRACKET_RE.lastIndex = 0;
+
+    while ((bm = BRACKET_RE.exec(state.rawStrippedText)) !== null) {
+      const blockContent = bm[1];
+      const blockStart = bm.index + 1;
+      const blockMatches = [];
+
+      // Build tag-stripped, entity-decoded block for regex matching
+      const { clean: cleanBlock, cleanToRaw } = buildCleanBlock(blockContent);
+
+      // Helper: translate a [cleanStart, cleanEnd) match in cleanBlock
+      // back to rawStart/rawEnd in rawStrippedText.
+      function cleanToRawRange(cleanStart, cleanEnd) {
+        const rawRel0 = cleanToRaw[cleanStart] !== undefined ? cleanToRaw[cleanStart] : blockContent.length;
+        // rawEnd: position AFTER the last matched clean char
+        const lastCleanIdx = cleanEnd - 1;
+        let rawRel1;
+        if (lastCleanIdx >= 0 && cleanToRaw[lastCleanIdx] !== undefined) {
+          // Advance past this raw char (or entity)
+          let ri = cleanToRaw[lastCleanIdx];
+          if (blockContent[ri] === '&') {
+            const semi = blockContent.indexOf(';', ri);
+            rawRel1 = semi !== -1 ? semi + 1 : ri + 1;
+          } else {
+            rawRel1 = ri + 1;
+          }
+        } else {
+          rawRel1 = blockContent.length;
+        }
+        return { rawStart: blockStart + rawRel0, rawEnd: blockStart + rawRel1 };
+      }
+
+      // Pass 1: two-word institutions — "World Bank 1991"
+      TWO_WORD_RE.lastIndex = 0;
+      let tw;
+      while ((tw = TWO_WORD_RE.exec(cleanBlock)) !== null) {
+        const institution = tw[1].trim();
+        const year = tw[2];
+        // Use last word of institution as lookup key (e.g. "Bank" for "World Bank")
+        // But also try full institution and first word
+        const words = institution.split(/\s+/);
+        let ref = findRef(words[words.length - 1], year)  // last word
+               || findRef(words[0], year)                  // first word
+               || findRef(institution.replace(/\s+/g, ''), year); // no space
+        if (!ref) continue;
+        const href = `${state.refFileName}#${ref.id}`;
+        if (alreadyLinked.has(href)) continue;
+        const { rawStart, rawEnd } = cleanToRawRange(tw.index, tw.index + tw[0].length);
+        if (isOverlapping(rawStart, rawEnd)) continue;
+        blockMatches.push({ rawStart, rawEnd, ref, href });
+      }
+
+      // Pass 2: slash-separated acronyms — "IUCN/UNEP/WWF 1991"
+      SLASH_ACRONYM_RE.lastIndex = 0;
+      let sa;
+      while ((sa = SLASH_ACRONYM_RE.exec(cleanBlock)) !== null) {
+        const acronymGroup = sa[1]; // e.g. "IUCN/UNEP/WWF"
+        const year = sa[2];
+        // Try each segment as lookup key, last one first
+        const segments = acronymGroup.split('/').reverse();
+        let ref = null;
+        for (const seg of segments) {
+          ref = findRef(seg, year);
+          if (ref) break;
+        }
+        if (!ref) continue;
+        const href = `${state.refFileName}#${ref.id}`;
+        if (alreadyLinked.has(href)) continue;
+        const { rawStart, rawEnd } = cleanToRawRange(sa.index, sa.index + sa[0].length);
+        if (isOverlapping(rawStart, rawEnd)) continue;
+        blockMatches.push({ rawStart, rawEnd, ref, href });
+      }
+
+      // Pass 3: standard TOKEN_RE — single, two-author, et al.
+      TOKEN_RE.lastIndex = 0;
+      let tm;
+      while ((tm = TOKEN_RE.exec(cleanBlock)) !== null) {
+        const authorPart = tm[1].trim();
+        const year = tm[2];
+
+        // Skip if this position already covered by Pass 1 or 2
+        const { rawStart: tmRawStart, rawEnd: tmRawEnd } = cleanToRawRange(tm.index, tm.index + tm[0].length);
+        const alreadyCovered = blockMatches.some(m =>
+          tmRawStart >= m.rawStart && tmRawEnd <= m.rawEnd
+        );
+        if (alreadyCovered) continue;
+
+        tryPushMatch(tmRawStart, tmRawEnd, authorPart, year, blockMatches);
+      }
+
+      // Pass 4: chained years — "FAO 1981, 1988, 1991a"
+      // Run after all base matches collected
+      const baseMatches = [...blockMatches];
+      baseMatches.forEach(base => {
+        const CHAIN_RE = /,\s*((?:19|20)\d{2}[a-z]?)/g;
+        // Find the clean position corresponding to raw relative end
+        const rawRelEnd = base.rawEnd - blockStart;
+        let cleanRelEnd = cleanToRaw.findIndex(r => r >= rawRelEnd);
+        if (cleanRelEnd === -1) cleanRelEnd = cleanBlock.length;
+        CHAIN_RE.lastIndex = cleanRelEnd;
+        let lastRelEnd = cleanRelEnd;
+        let c;
+
+        while ((c = CHAIN_RE.exec(cleanBlock)) !== null) {
+          if (c.index !== lastRelEnd) break;
+          const chainYear = c[1];
+          const chainRef = findRef(base.ref.firstSurname, chainYear);
+          if (!chainRef) break;
+
+          const href = `${state.refFileName}#${chainRef.id}`;
+          if (alreadyLinked.has(href)) break;
+
+          const commaLen = c[0].indexOf(chainYear);
+          const { rawStart, rawEnd } = cleanToRawRange(c.index + commaLen, c.index + c[0].length);
+          if (isOverlapping(rawStart, rawEnd)) break;
+
+          blockMatches.push({ rawStart, rawEnd, ref: chainRef, href });
+          lastRelEnd = c.index + c[0].length;
+          CHAIN_RE.lastIndex = lastRelEnd;
+        }
+      });
+
+      finalMatches.push(...blockMatches);
+    }
+
+    // ── Scan B: Author (Year) pattern — Rule 2 ──
+    // Matches: "Sayer et al. (1992)" / "WRI (1994)" / "Collins et al. (1991)"
+    // Also handles: "Mergen & Vincent (1987)" / "Branch (1983)"
+    // Does NOT re-link positions already covered by Scan A
+    const AUTHOR_YEAR_RE = new RegExp(
+      // Optional leading initial: "A. Johns"
+      '(?:[A-Z]\\.\\s+)?' +
+      // Author part — same as TOKEN_RE author section
+      '(' +
+        '(?:[A-Z][A-Za-záéíóúñ\\-]+' +
+        '(?:\\s+(?:de|van|von|le|la|du|der|den)\\s+[A-Z][A-Za-z\\-]+)?' +
+        '(?:(?:\\s*(?:&|and)\\s*[A-Z][A-Za-z\\-]+(?:\\s+(?:de|van|von|le|la|du|der|den)\\s+[A-Z][A-Za-z\\-]+)?)|(?:\\s+et\\.?\\s*al\\.?))?' +
+        '|[A-Z]{2,})' +
+      ')' +
+      // Year MUST be in brackets: (1992) or (1992a)
+      '\\s*\\(((?:19|20)\\d{2}[a-z]?)\\)',
+      'g'
+    );
+
+    // Build tag-stripped + entity-decoded version of rawStrippedText for Scan B.
+    // Strips inline tags (<i>, <b>, <em>, etc.) and decodes HTML entities.
+    // decodedBMap[decodedIdx] = rawIdx in rawStrippedText.
+    let decodedB = '';
+    const decodedBMap = [];
+    (function buildDecodedB() {
+      const raw = state.rawStrippedText;
+      const INLINE_TAG_RE = /^<\/?(i|b|em|strong|u|sup|sub|span|sc|small)(\s[^>]*)?\s*\/?>/i;
+      let i = 0;
+      while (i < raw.length) {
+        if (raw[i] === '<') {
+          // Check if it's an inline tag — strip it (don't add to decodedB)
+          const rest = raw.slice(i);
+          const tagMatch = INLINE_TAG_RE.exec(rest);
+          if (tagMatch) {
+            i += tagMatch[0].length;
+            continue;
+          }
+          // Non-inline tag — keep as-is (so block boundaries still exist)
+          const close = raw.indexOf('>', i);
+          if (close === -1) break;
+          // Don't map these — they're not text chars
+          i = close + 1;
+          continue;
+        }
+        if (raw[i] === '&') {
+          const semi = raw.indexOf(';', i);
+          if (semi !== -1 && semi - i <= 10) {
+            const entity = raw.slice(i, semi + 1);
+            const decoded = decodeEntity(entity);
+            if (decoded !== null) {
+              decodedBMap.push(i);
+              decodedB += decoded;
+              i = semi + 1;
+              continue;
+            }
+          }
+        }
+        decodedBMap.push(i);
+        decodedB += raw[i];
+        i++;
+      }
+    })();
+
+    // Translate [dStart, dEnd) in decodedB back to rawStrippedText offsets.
+    function decodedBToRaw(dStart, dEnd) {
+      const rawStart = decodedBMap[dStart] !== undefined
+        ? decodedBMap[dStart]
+        : state.rawStrippedText.length;
+      const lastD = dEnd - 1;
+      let rawEnd;
+      if (lastD >= 0 && decodedBMap[lastD] !== undefined) {
+        let ri = decodedBMap[lastD];
+        if (state.rawStrippedText[ri] === '&') {
+          const semi = state.rawStrippedText.indexOf(';', ri);
+          rawEnd = semi !== -1 ? semi + 1 : ri + 1;
+        } else {
+          rawEnd = ri + 1;
+        }
+      } else {
+        rawEnd = state.rawStrippedText.length;
+      }
+      return { rawStart, rawEnd };
+    }
+
+    AUTHOR_YEAR_RE.lastIndex = 0;
+    let ay;
+    while ((ay = AUTHOR_YEAR_RE.exec(decodedB)) !== null) {
+      const authorPart = ay[1].trim();
+      const year = ay[2];
+
+      // Full match includes "Author (Year)" — we link just "Author" part
+      // rawStart = start of author, rawEnd = end of closing bracket
+      const { rawStart, rawEnd } = decodedBToRaw(ay.index, ay.index + ay[0].length);
+
+      // Skip if already covered by Scan A
+      const alreadyCovered = finalMatches.some(m =>
+        rawStart >= m.rawStart && rawEnd <= m.rawEnd
+      );
+      if (alreadyCovered) continue;
+
+      // Skip if overlaps existing linkEdits
+      if (isOverlapping(rawStart, rawEnd)) continue;
+
+      // Extract first surname
+      const firstSurnameMatch = authorPart.match(
+        /^([A-Z][A-Za-záéíóúñ\-]+(?:\s+(?:de|van|von|le|la|du|der|den)\s+[A-Z][A-Za-záéíóúñ\-]+)?|[A-Z]{2,})/
+      );
+      if (!firstSurnameMatch) continue;
+      const firstSurname = firstSurnameMatch[1];
+
+      const ref = findRef(firstSurname, year);
+      if (!ref) continue;
+
+      const href = `${state.refFileName}#${ref.id}`;
+      if (alreadyLinked.has(href)) continue;
+
+      finalMatches.push({ rawStart, rawEnd, ref, href });
+    }
+
+    // Sort by position, remove overlaps
+    finalMatches.sort((a, b) => a.rawStart - b.rawStart);
+    const deduped = [];
+    let lastEnd = -1;
+    finalMatches.forEach(match => {
+      if (match.rawStart >= lastEnd) {
+        deduped.push(match);
+        lastEnd = match.rawEnd;
+      }
+    });
+
+    if (!deduped.length) {
+      toast('No new citations found to auto-link', 'warning');
+      autoLinkBtn.disabled = false;
+      autoLinkBtn.querySelector('span').textContent = 'Auto Link';
+      return;
+    }
+
+    // Push to linkEdits in reverse order
+    [...deduped].reverse().forEach(match => {
+      state.linkEdits.push({
+        start: match.rawStart,
+        end: match.rawEnd,
+        openTag: `<a href="${match.href}">`,
+        closeTag: '</a>',
+        id: match.ref.id,
+        domAnchor: null,
+        auto: true
+      });
+    });
+
+    applyLinkEditsToDom();
+
+    autoLinkBtn.disabled = false;
+    autoLinkBtn.querySelector('span').textContent = 'Auto Link';
+    toast(`Auto-linked ${deduped.length} citation${deduped.length === 1 ? '' : 's'}`, 'success');
+    renderCitationList();
+  }
+
+  function applyLinkEditsToDom() {
+    // Reset all domAnchors — old DOM nodes are about to be destroyed
+    state.linkEdits.forEach(e => { e.domAnchor = null; });
+
+    // Rebuild rawStrippedText with all linkEdits applied
+    let text = state.rawStrippedText;
+    const sortedDesc = [...state.linkEdits].sort((a, b) => b.start - a.start);
+    sortedDesc.forEach(edit => {
+      text = text.slice(0, edit.start) + edit.openTag
+           + text.slice(edit.start, edit.end) + edit.closeTag
+           + text.slice(edit.end);
+    });
+
+    // Parse and render into contentArea
+    const doc = parseXhtml(text);
+    const body = doc ? doc.querySelector('body') : null;
+    contentArea.innerHTML = '';
+    if (body) {
+      Array.from(body.childNodes).forEach(node => {
+        contentArea.appendChild(document.importNode(node, true));
+      });
+    } else {
+      contentArea.innerHTML = text;
+    }
+
+    // Re-classify anchors by matching edit start position via data attribute
+    // Sort edits by start ascending to match DOM order
+    const editsByOrder = [...state.linkEdits].sort((a, b) => a.start - b.start);
+    const anchors = [...contentArea.querySelectorAll('a[href]')];
+
+    // Match each anchor to its edit by order (DOM order == edit insertion order)
+    let editIdx = 0;
+    anchors.forEach(a => {
+      const href = a.getAttribute('href');
+      // Find next unmatched edit whose href matches
+      let found = null;
+      for (let i = editIdx; i < editsByOrder.length; i++) {
+        const e = editsByOrder[i];
+        if (`${state.refFileName}#${e.id}` === href && e.domAnchor === null) {
+          found = e;
+          editIdx = i + 1;
+          break;
+        }
+      }
+      if (!found) {
+        // fallback — find any matching unmatched edit
+        found = state.linkEdits.find(e =>
+          `${state.refFileName}#${e.id}` === href && e.domAnchor === null
+        );
+      }
+      if (!found) return;
+      found.domAnchor = a;
+      a.classList.add('rle-citation');
+      if (found.auto) {
+        a.classList.add('rle-auto-linked');
+      } else {
+        a.classList.add('already-linked');
+      }
+    });
+
+    highlightYears(contentArea);
+  }
+
   copyBtn.addEventListener('click', () => {
     if (!state.rawStrippedText) return;
 
