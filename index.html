@@ -195,6 +195,45 @@
       </div>
     </div>
 
+    <!-- TAB 4 SIDEBAR — Content Linker -->
+    <div class="sidebar-steps" data-for-tab="4" hidden>
+      <div class="steps">
+
+        <!-- STEP 1: Choose Folder -->
+        <div class="step" id="clStep1">
+          <div class="step-head">
+            <span class="step-num">1</span>
+            <span class="step-title">Choose Folder</span>
+            <span class="step-check" id="clFolderCheck"><i data-lucide="check"></i></span>
+          </div>
+          <button class="step-btn" id="clFolderPickBtn">
+            <i data-lucide="folder-open" class="lg"></i>
+            <span class="step-btn-text" id="clFolderPickText">Choose Folder</span>
+            <i data-lucide="chevron-right" class="step-btn-arrow"></i>
+          </button>
+          <input type="file" id="clFolderInput" webkitdirectory mozdirectory multiple hidden/>
+          <div class="step-status" id="clFolderStatus">Select folder with XHTML files</div>
+        </div>
+
+        <!-- STEP 2: Choose Content File -->
+        <div class="step" id="clStep2">
+          <div class="step-head">
+            <span class="step-num">2</span>
+            <span class="step-title">Choose Content File</span>
+            <span class="step-check" id="clFileCheck"><i data-lucide="check"></i></span>
+          </div>
+          <button class="step-btn" id="clFilePickBtn">
+            <i data-lucide="file-code" class="lg"></i>
+            <span class="step-btn-text" id="clFilePickText">Choose Content File</span>
+            <i data-lucide="chevron-right" class="step-btn-arrow"></i>
+          </button>
+          <input type="file" id="clFileInput" accept=".xhtml,.html,.xml" hidden/>
+          <div class="step-status" id="clFileStatus">XHTML content file to process</div>
+        </div>
+
+      </div>
+    </div>
+
     <!-- TAB 1 FOOT -->
     <div class="sidebar-foot" data-foot-tab="1">
 
@@ -232,6 +271,13 @@
       </button>
     </div>
 
+    <!-- TAB 4 FOOT -->
+    <div class="sidebar-foot" data-foot-tab="4" hidden>
+      <button class="btn-run" id="clProcessBtn" disabled>
+        <i data-lucide="play"></i><span>Process</span>
+      </button>
+    </div>
+
     <!-- SHARED: theme toggle -->
     <div class="sidebar-theme">
       <button class="theme-btn" id="themeToggle" aria-label="Toggle color theme">
@@ -254,6 +300,9 @@
       </button>
       <button class="tab-btn" id="tabBtn3" data-tab="3">
         <i data-lucide="list-tree"></i><span class="tab-text">Reference Linker Ext</span>
+      </button>
+      <button class="tab-btn" id="tabBtn4" data-tab="4">
+        <i data-lucide="layers"></i><span class="tab-text">Content Linker</span>
       </button>
     </div>
 
@@ -462,7 +511,82 @@
 
     </div>
 
+    <!-- ============ TAB 4 PANE ============ -->
+    <div class="tab-pane" id="tabPane4" hidden style="flex-direction:column;">
+      <div class="main-body" id="clEmptyState">
+        <div class="empty-state">
+          <span class="empty-icon"><i data-lucide="layers"></i></span>
+          <h2>Content Linker</h2>
+          <p>Choose a folder and a content file in the sidebar to get started.</p>
+          <span class="empty-hint">
+            <i data-lucide="arrow-left"></i> Start with step 1 in the sidebar
+          </span>
+        </div>
+      </div>
+      <div id="clWorkspace" hidden>
+
+        <!-- Summary bar -->
+        <div class="summary-bar">
+          <div class="stat pass">
+            <span class="stat-num" id="clStatMatched">0</span>
+            <span class="stat-label">Matched</span>
+          </div>
+          <div class="stat fail">
+            <span class="stat-num" id="clStatUnresolved">0</span>
+            <span class="stat-label">Unresolved</span>
+          </div>
+          <div style="margin-left:auto;display:flex;gap:8px;">
+            <button class="btn-ghost" id="clCopyReportBtn" disabled>
+              <i data-lucide="copy"></i><span>Copy Report</span>
+            </button>
+            <button class="btn-ghost" id="clCopyXhtmlBtn" disabled>
+              <i data-lucide="clipboard-copy"></i><span>Copy XHTML</span>
+            </button>
+            <button class="btn-ghost" id="clDownloadBtn" disabled>
+              <i data-lucide="download"></i><span>Download</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Workspace body -->
+        <div style="display:flex;flex:1;overflow:hidden;height:100%;">
+
+          <!-- Middle: TOC preview -->
+          <div class="doc-preview preview-doc" id="clContentArea" style="flex:1;overflow-y:auto;padding:24px;"></div>
+
+          <!-- Right: Results list -->
+          <div class="rle-sidebar" style="width:280px;border-left:1px solid var(--border);display:flex;flex-direction:column;">
+            <div class="rle-sidebar-head">
+              <span class="rle-sidebar-title">Link Results</span>
+            </div>
+            <div class="rle-sidebar-body" id="clResultsList" style="flex:1;overflow-y:auto;"></div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+
   </main>
+</div>
+
+<!-- ============ CONTENT LINKER: RESOLVE POPUP ============ -->
+<div class="modal-overlay" id="clResolveModal" hidden>
+  <div class="popup popup-modal">
+    <div class="popup-head">
+      <span class="popup-sel" id="clResolveModalTitle">Resolve Link</span>
+      <button class="popup-close" id="clResolveModalClose" aria-label="Close"><i data-lucide="x"></i></button>
+    </div>
+    <div style="padding:10px 12px;border-bottom:1px solid var(--border);">
+      <button class="step-btn" id="clResolveFilePick" style="width:100%;">
+        <i data-lucide="file-code" class="lg"></i>
+        <span class="step-btn-text" id="clResolveFileText">Choose XHTML File</span>
+        <i data-lucide="chevron-right" class="step-btn-arrow"></i>
+      </button>
+      <input type="file" id="clResolveFileInput" accept=".xhtml,.html,.xml" hidden/>
+    </div>
+    <div class="popup-list" id="clResolveHeadingList"></div>
+  </div>
 </div>
 
 <!-- ============ BADGE CONTEXT MENU ============ -->
@@ -500,5 +624,6 @@
 <script src="app.js"></script>
 <script src="app-external.js"></script>
 <script src="reference-linker-ext.js"></script>
+<script src="content-linker.js"></script>
 </body>
 </html>
