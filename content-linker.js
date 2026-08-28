@@ -273,7 +273,9 @@ clProcessBtn.addEventListener('click', () => {
 
 function runAutoLink() {
   // Normalize all hrefs to {0} before processing
-  clState.contentRaw = clState.contentRaw.replace(/href="[^"]*"/g, 'href="{0}"');
+  clState.contentRaw = clState.contentRaw.replace(/<a\s[^>]*href="[^"]*"/g, match =>
+    match.replace(/href="[^"]*"/, 'href="{0}"')
+  );
 
   const index = clState.fileIndex;
 
