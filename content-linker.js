@@ -209,18 +209,34 @@ function reformatTocBlock(raw) {
   function formatUl(ulEl, depth) {
     const indent = '  '.repeat(depth);
     let out = `${indent}<ul${ulEl === doc.querySelector('ul') ? ' class="toc"' : ''}>\n`;
-    for (const li of ulEl.children) {
-      if (li.tagName !== 'li' && li.tagName !== 'LI') continue;
-      // Get direct children — split into non-ul and ul parts
-      const childUl  = li.querySelector(':scope > ul');
-      // Collect inline content (everything except nested ul)
+    for (const child of ulEl.children) {
+      const tag = child.tagName.toLowerCase();
+
+      // Handle <p> tags — preserve as-is with indentation
+      if (tag === 'p') {
+        const tmp = document.createElement('div');
+        tmp.appendChild(child.cloneNode(true));
+        let pHtml = tmp.innerHTML.replace(/\s+/g, ' ').trim();
+        out += `${indent}  ${pHtml}\n`;
+        continue;
+      }
+
+      // Handle standalone <ul> (not inside <li>) — recurse
+      if (tag === 'ul') {
+        out += formatUl(child, depth + 1) + '\n';
+        continue;
+      }
+
+      // Handle <li> as before
+      if (tag !== 'li') continue;
+
+      const childUl = child.querySelector(':scope > ul');
       let inline = '';
-      for (const node of li.childNodes) {
+      for (const node of child.childNodes) {
         if (node.nodeType === 1 && (node.tagName === 'ul' || node.tagName === 'UL')) continue;
         if (node.nodeType === 3) {
           inline += node.textContent.replace(/\s+/g, ' ').trim();
         } else if (node.nodeType === 1) {
-          // serialize the inline element
           const tmp = document.createElement('div');
           tmp.appendChild(node.cloneNode(true));
           inline += tmp.innerHTML;
@@ -256,6 +272,9 @@ clProcessBtn.addEventListener('click', () => {
 });
 
 function runAutoLink() {
+  // Normalize all hrefs to {0} before processing
+  clState.contentRaw = clState.contentRaw.replace(/href="[^"]*"/g, 'href="{0}"');
+
   const index = clState.fileIndex;
 
   /* Build two pools (consumed in order to handle duplicates like "Summary"):
@@ -371,6 +390,10 @@ function renderResults(results, doc) {
   /* Style matched/unresolved links in preview + attach result index */
   let aIdx = 0;
   clContentArea.querySelectorAll('a').forEach(a => {
+    if (aIdx >= clState.results.length) {
+      aIdx++;
+      return;
+    }
     const href = a.getAttribute('href');
     a.dataset.resultIdx = aIdx;
     if (!href || href === '{0}') {
@@ -593,6 +616,7 @@ clResolveSearch.addEventListener('input', () => {
 
 function openResolvePopup(resultIdx) {
   const r = clState.results[resultIdx];
+  if (!r) return;  //  ADD THIS GUARD
   const statusLabel = r.status === 'unresolved' ? 'Resolve' : 'Change Link';
   clResolveModalTitle.textContent = `${statusLabel}: ${r.tocText.trim()}`;
   const clResolveModalTitle2 = document.getElementById('clResolveModalTitle2');
