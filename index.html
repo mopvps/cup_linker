@@ -535,6 +535,14 @@
             <span class="stat-num" id="clStatUnresolved">0</span>
             <span class="stat-label">Unresolved</span>
           </div>
+          <div class="stat">
+            <span id="clStatDupe" style="color:var(--warning,#d97706);font-weight:700;font-size:1.1rem;">0</span>
+            <span style="font-size:0.72rem;color:var(--text-muted);">DUPLICATE IDs</span>
+          </div>
+          <div id="clProgressBarWrap" style="width:160px;height:8px;background:var(--border);border-radius:4px;overflow:hidden;display:inline-block;vertical-align:middle;margin-left:12px;">
+            <div id="clProgressBar" style="height:100%;width:0%;background:var(--success,#38a169);border-radius:4px;transition:width 0.3s ease;"></div>
+          </div>
+          <span id="clProgressText" style="font-size:0.75rem;color:var(--text-muted);margin-left:6px;vertical-align:middle;"></span>
           <div style="margin-left:auto;display:flex;gap:8px;">
             <button class="btn-ghost" id="clCopyReportBtn" disabled>
               <i data-lucide="copy"></i><span>Copy Report</span>
@@ -547,6 +555,7 @@
             </button>
           </div>
         </div>
+        <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;">⌨ N = next unresolved / duplicate · Esc = close modal</div>
 
         <!-- Workspace body -->
         <div style="display:flex;flex:1;overflow:hidden;height:100%;">
@@ -572,20 +581,49 @@
 
 <!-- ============ CONTENT LINKER: RESOLVE POPUP ============ -->
 <div class="modal-overlay" id="clResolveModal" hidden>
-  <div class="popup popup-modal">
-    <div class="popup-head">
-      <span class="popup-sel" id="clResolveModalTitle">Resolve Link</span>
-      <button class="popup-close" id="clResolveModalClose" aria-label="Close"><i data-lucide="x"></i></button>
-    </div>
-    <div style="padding:10px 12px;border-bottom:1px solid var(--border);">
-      <button class="step-btn" id="clResolveFilePick" style="width:100%;">
-        <i data-lucide="file-code" class="lg"></i>
-        <span class="step-btn-text" id="clResolveFileText">Choose XHTML File</span>
-        <i data-lucide="chevron-right" class="step-btn-arrow"></i>
+  <div class="popup popup-modal cl-resolve-modal">
+
+    <!-- Header -->
+    <div class="popup-head cl-resolve-head">
+      <div class="cl-resolve-title-wrap">
+        <i data-lucide="link" class="cl-resolve-icon"></i>
+        <span class="popup-sel" id="clResolveModalTitle">Resolve Link</span>
+      </div>
+      <button class="popup-close" id="clResolveModalClose" aria-label="Close">
+        <i data-lucide="x"></i>
       </button>
-      <input type="file" id="clResolveFileInput" accept=".xhtml,.html,.xml" hidden/>
     </div>
-    <div class="popup-list" id="clResolveHeadingList"></div>
+
+    <!-- TOC entry info bar -->
+    <div class="cl-resolve-info">
+      <span class="cl-resolve-info-label">TOC Entry</span>
+      <span class="cl-resolve-info-value" id="clResolveModalTitle2">—</span>
+    </div>
+
+    <!-- File selector -->
+    <div class="cl-resolve-file-section">
+      <label class="cl-resolve-label">
+        <i data-lucide="folder-open"></i>
+        Select File
+      </label>
+      <select id="clResolveFileSelect" class="cl-resolve-select">
+        <option value="">-- Select a file --</option>
+      </select>
+    </div>
+
+    <!-- Heading list -->
+    <div class="cl-resolve-list-label">
+      <i data-lucide="hash"></i>
+      Select Heading
+    </div>
+    <div class="cl-resolve-search">
+      <i data-lucide="search"></i>
+      <input type="text" id="clResolveSearch" placeholder="Search headings..." autocomplete="off" />
+    </div>
+    <div class="popup-list cl-resolve-list" id="clResolveHeadingList">
+      <div class="cl-resolve-placeholder">Select a file to see headings</div>
+    </div>
+
   </div>
 </div>
 
@@ -619,6 +657,22 @@
   <div class="popup-list" id="refExtPopupList"></div>
 </div>
 
+<div id="clTooltip" style="
+  position:fixed;
+  display:none;
+  background:var(--surface-raised, #1e2a4a);
+  color:#fff;
+  font-size:0.72rem;
+  font-family:monospace;
+  padding:4px 10px;
+  border-radius:5px;
+  pointer-events:none;
+  z-index:9999;
+  box-shadow:0 2px 8px rgba(0,0,0,0.25);
+  border:1px solid var(--accent,#2B3A9C);
+  max-width:320px;
+  word-break:break-all;
+"></div>
 <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
 <script src="app.js"></script>

@@ -9,6 +9,7 @@ const clState = {
   results:         [],  // [{ tocText, resolved, status }]
   resolvedContent: '',
 };
+let clDupeHrefs = new Set();
 
 /* ── DOM ── */
 const clFolderPickBtn  = document.getElementById('clFolderPickBtn');
@@ -32,9 +33,36 @@ const clContentArea    = document.getElementById('clContentArea');
 const clResultsList    = document.getElementById('clResultsList');
 const clStatMatched    = document.getElementById('clStatMatched');
 const clStatUnresolved = document.getElementById('clStatUnresolved');
+const clStatDupe       = document.getElementById('clStatDupe');
+const clProgressBar     = document.getElementById('clProgressBar');
+const clProgressBarWrap = document.getElementById('clProgressBarWrap');
+const clProgressText    = document.getElementById('clProgressText');
+
+function updateProgressBar() {
+  const total   = clState.results.length;
+  const matched = clState.results.filter(r => r.status === 'matched').length;
+  const pct     = total ? (matched / total * 100).toFixed(1) : 0;
+  clProgressBar.style.width = pct + '%';
+  clProgressText.textContent = matched + ' / ' + total;
+  clProgressBar.style.background = (matched === total)
+    ? 'var(--success,#38a169)'
+    : 'var(--accent,#2B3A9C)';
+}
 const clDownloadBtn    = document.getElementById('clDownloadBtn');
 const clCopyReportBtn  = document.getElementById('clCopyReportBtn');
 const clCopyXhtmlBtn   = document.getElementById('clCopyXhtmlBtn');
+const clTooltip        = document.getElementById('clTooltip');
+
+/* Find hrefs used by more than one matched result */
+function findDuplicateHrefs(results) {
+  const counts = new Map();
+  results.forEach(r => {
+    if (r.status === 'matched' && r.resolved) {
+      counts.set(r.resolved, (counts.get(r.resolved) || 0) + 1);
+    }
+  });
+  return new Set([...counts.entries()].filter(([, c]) => c > 1).map(([href]) => href));
+}
 
 /* ══════════════════════════════════
    STEP 1 — Folder
@@ -120,6 +148,27 @@ function syncClProcessBtn() {
   clProcessBtn.disabled = !(clState.folderFiles.length && clState.contentRaw);
 }
 
+/* Look up the actual heading text a resolved href points to */
+function getHeadingText(href) {
+  if (!href || href === '{0}') return null;
+  const [filename, id] = href.split('#');
+  const file = clState.fileIndex.find(f => f.name === filename);
+  if (!file) return filename;
+  if (!id) {
+    const h1 = file.headings.find(h => h.level === 1);
+    return (h1 && h1.text) || filename;
+  }
+  const h = file.headings.find(h => h.id === id);
+  return h ? h.text : filename;
+}
+
+/* Re-encode non-ASCII chars back to hex entities (undo DOMParser decoding) */
+function reEncodeEntities(str) {
+  return str.replace(/[^\x00-\x7F]/g, c =>
+    '&#x' + c.codePointAt(0).toString(16).toUpperCase() + ';'
+  );
+}
+
 /* Normalize: lowercase, collapse whitespace */
 function normalizeText(str) {
   return str.replace(/\s+/g, ' ').trim().toLowerCase();
@@ -191,7 +240,7 @@ function reformatTocBlock(raw) {
   }
 
   const formatted = formatUl(ul, 0);
-  return before + formatted + '\n' + after;
+  return reEncodeEntities(before + formatted + '\n' + after);
 }
 
 /* ══════════════════════════════════
@@ -299,11 +348,15 @@ function runAutoLink() {
 function renderResults(results, doc) {
   const matched    = results.filter(r => r.status === 'matched').length;
   const unresolved = results.filter(r => r.status === 'unresolved').length;
+  const dupeHrefs  = findDuplicateHrefs(results);
+  clDupeHrefs = dupeHrefs;
 
   /* Stats */
   clStatMatched.textContent    = matched;
   clStatUnresolved.textContent = unresolved;
   clStatUnresolved.style.color = unresolved > 0 ? 'var(--fail)' : 'var(--pass)';
+  clStatDupe.textContent       = dupeHrefs.size;
+  updateProgressBar();
 
   /* Middle: render TOC preview */
   const tocUl = doc.querySelector('ul.toc');
@@ -323,16 +376,78 @@ function renderResults(results, doc) {
     if (!href || href === '{0}') {
       a.style.color          = 'var(--danger, #e53e3e)';
       a.style.textDecoration = 'line-through';
-      a.style.pointerEvents  = 'auto';
-      a.style.cursor         = 'pointer';
-      a.addEventListener('click', e => {
-        e.preventDefault();
-        openResolvePopup(+a.dataset.resultIdx);
-      });
+    } else if (dupeHrefs.has(href)) {
+      a.style.color               = 'var(--warning, #d97706)';
+      a.style.textDecoration      = 'underline';
+      a.style.textDecorationColor = 'var(--warning, #d97706)';
+      a.style.outline             = '1px solid var(--warning, #d97706)';
+      a.style.borderRadius        = '3px';
+      a.style.padding             = '0 2px';
     } else {
       a.style.color         = 'var(--success, #38a169)';
-      a.style.pointerEvents = 'none';
     }
+    a.style.pointerEvents = 'auto';
+    a.style.cursor        = 'pointer';
+    a.addEventListener('click', e => {
+      e.preventDefault();
+      openResolvePopup(+a.dataset.resultIdx);
+    });
+    a.addEventListener('mouseenter', () => {
+      const idx = +a.dataset.resultIdx;
+      const sidebarItem = clResultsList.querySelector(`[data-result-idx="${idx}"]`);
+      if (sidebarItem) {
+        sidebarItem.style.background = 'var(--hover, rgba(43,58,156,0.08))';
+        sidebarItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    });
+    a.addEventListener('mouseleave', () => {
+      const idx = +a.dataset.resultIdx;
+      const sidebarItem = clResultsList.querySelector(`[data-result-idx="${idx}"]`);
+      if (sidebarItem) sidebarItem.style.background = '';
+    });
+
+    /* Inline file badge (DOM only, not part of exported content) */
+    const badge = document.createElement('span');
+    badge.className = 'cl-file-badge';
+    if (!href || href === '{0}') {
+      badge.classList.add('unresolved');
+      badge.textContent = 'unresolved';
+    } else if (dupeHrefs.has(href)) {
+      badge.classList.add('duplicate');
+      const headingText = getHeadingText(href);
+      badge.textContent = headingText ? `→ ${headingText}` : href;
+    } else {
+      const headingText = getHeadingText(href);
+      badge.textContent = headingText ? `→ ${headingText}` : href;
+    }
+    if (a.parentNode) {
+      a.parentNode.insertBefore(badge, a.nextSibling);
+    }
+
+    /* Custom hover tooltip (DOM only) */
+    a.addEventListener('mouseenter', e => {
+      if (!href || href === '{0}') {
+        clTooltip.textContent = 'Unresolved — click to fix';
+        clTooltip.style.borderColor = 'var(--danger,#e53e3e)';
+      } else if (dupeHrefs.has(href)) {
+        clTooltip.textContent = '⚠ Duplicate ID: ' + href;
+        clTooltip.style.borderColor = 'var(--warning,#d97706)';
+      } else {
+        clTooltip.textContent = '🔗 ' + href;
+        clTooltip.style.borderColor = 'var(--accent,#2B3A9C)';
+      }
+      clTooltip.style.display = 'block';
+      clTooltip.style.left = (e.clientX + 12) + 'px';
+      clTooltip.style.top  = (e.clientY - 28) + 'px';
+    });
+    a.addEventListener('mousemove', e => {
+      clTooltip.style.left = (e.clientX + 12) + 'px';
+      clTooltip.style.top  = (e.clientY - 28) + 'px';
+    });
+    a.addEventListener('mouseleave', () => {
+      clTooltip.style.display = 'none';
+    });
+
     aIdx++;
   });
 
@@ -340,16 +455,43 @@ function renderResults(results, doc) {
   clResultsList.innerHTML = '';
   results.forEach((r, i) => {
     const item = document.createElement('div');
+    item.className = 'cl-result-item';
     item.dataset.resultIdx = i;
-    item.style.cssText = `padding:6px 8px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:2px;`;
+    item.style.cssText = `padding:6px 8px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:2px;cursor:pointer;`;
     const icon  = r.status === 'matched' ? '✓' : '✗';
     const color = r.status === 'matched' ? 'var(--success,#38a169)' : 'var(--danger,#e53e3e)';
-    if (r.status === 'unresolved') {
-      item.style.cursor = 'pointer';
-      item.addEventListener('click', () => openResolvePopup(i));
+    item.addEventListener('click', () => {
+      const anchor = clContentArea.querySelector(`a[data-result-idx="${i}"]`);
+      if (anchor) {
+        anchor.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        anchor.style.outline = '2px solid var(--accent, #2B3A9C)';
+        anchor.style.borderRadius = '3px';
+        setTimeout(() => {
+          anchor.style.outline = '';
+          anchor.style.borderRadius = '';
+        }, 1200);
+      }
+      openResolvePopup(i);
+    });
+    item.addEventListener('mouseenter', () => {
+      const anchor = clContentArea.querySelector(`a[data-result-idx="${i}"]`);
+      if (anchor) anchor.style.outline = '2px solid var(--accent,#2B3A9C)';
+    });
+    item.addEventListener('mouseleave', () => {
+      const anchor = clContentArea.querySelector(`a[data-result-idx="${i}"]`);
+      if (anchor) anchor.style.outline = '';
+    });
+    const isDupe = r.resolved && dupeHrefs.has(r.resolved);
+    const dupBadge = isDupe
+      ? '<span style="background:var(--warning,#d97706);color:#fff;font-size:0.65rem;padding:1px 5px;border-radius:3px;margin-left:6px;">DUP</span>'
+      : '';
+    if (isDupe) {
+      item.style.borderLeft = '3px solid var(--warning, #d97706)';
+      item.style.background = 'var(--warning-bg, #fffbeb)';
+      item.title = 'This ID is linked to multiple TOC entries — verify manually';
     }
     item.innerHTML = `
-      <span style="color:${color};font-weight:600;font-size:0.75rem;">${icon} ${escapeHtml(r.tocText)}</span>
+      <span style="color:${color};font-weight:600;font-size:0.75rem;">${icon} ${escapeHtml(r.tocText)}${dupBadge}</span>
       <span style="color:var(--text-muted);font-size:0.72rem;word-break:break-all;">${r.resolved || 'unresolved'}</span>
     `;
     clResultsList.appendChild(item);
@@ -380,64 +522,93 @@ clWorkspace.style.overflow = 'hidden';
 const clResolveModal      = document.getElementById('clResolveModal');
 const clResolveModalTitle = document.getElementById('clResolveModalTitle');
 const clResolveModalClose = document.getElementById('clResolveModalClose');
-const clResolveFilePick   = document.getElementById('clResolveFilePick');
-const clResolveFileInput  = document.getElementById('clResolveFileInput');
-const clResolveFileText   = document.getElementById('clResolveFileText');
+const clResolveFileSelect = document.getElementById('clResolveFileSelect');
 const clResolveHeadingList= document.getElementById('clResolveHeadingList');
+const clResolveSearch     = document.getElementById('clResolveSearch');
 
 let clResolveTarget = null; // { resultIdx, sidebarItem, previewAnchor }
+let clHeadingBtns = [];
 
 clResolveModalClose.addEventListener('click', () => {
   clResolveModal.hidden = true;
   clResolveTarget = null;
 });
 
-clResolveFilePick.addEventListener('click', () => clResolveFileInput.click());
+function renderResolveHeadings(fileName) {
+  const entry = clState.fileIndex.find(f => f.name === fileName);
+  clResolveHeadingList.innerHTML = '';
+  if (!entry || !entry.headings.length) {
+    clResolveHeadingList.innerHTML = '<div style="padding:10px 12px;color:var(--muted);font-size:0.8rem;">No headings found.</div>';
+    return;
+  }
 
-clResolveFileInput.addEventListener('change', () => {
-  const file = clResolveFileInput.files[0];
-  if (!file) return;
-  clResolveFileText.textContent = file.name;
-  clResolveHeadingList.innerHTML = '<div style="padding:10px 12px;color:var(--muted);font-size:0.8rem;">Reading file...</div>';
-
-  const reader = new FileReader();
-  reader.onload = e => {
-    const parser = new DOMParser();
-    const doc    = parser.parseFromString(e.target.result, 'application/xhtml+xml');
-    const headings = [];
-    doc.querySelectorAll('h1,h2,h3,h4,h5').forEach(el => {
-      headings.push({ id: el.getAttribute('id'), text: el.textContent.replace(/\s+/g,' ').trim(), level: parseInt(el.tagName[1]) });
+  entry.headings.forEach(h => {
+    const btn = document.createElement('button');
+    btn.className = 'popup-item cl-heading-item';
+    btn.innerHTML = `
+      <span class="cl-heading-level">H${h.level}</span>
+      <span class="cl-heading-text">${escapeHtml(h.text)}</span>
+    `;
+    btn.addEventListener('click', () => {
+      const resolved = h.id ? `${fileName}#${h.id}` : fileName;
+      applyResolvedLink(resolved);
+      clResolveModal.hidden = true;
+      clResolveTarget = null;
     });
+    clResolveHeadingList.appendChild(btn);
+  });
+  clHeadingBtns = [...clResolveHeadingList.querySelectorAll('.cl-heading-item')];
+}
 
-    clResolveHeadingList.innerHTML = '';
-    if (!headings.length) {
-      clResolveHeadingList.innerHTML = '<div style="padding:10px 12px;color:var(--muted);font-size:0.8rem;">No headings found.</div>';
-      return;
+clResolveFileSelect.addEventListener('change', () => {
+  const fileName = clResolveFileSelect.value;
+  if (!fileName) {
+    clResolveHeadingList.innerHTML = '<div class="cl-resolve-placeholder">Select a file to see headings</div>';
+    return;
+  }
+  renderResolveHeadings(fileName);
+});
+
+clResolveSearch.addEventListener('input', () => {
+  const q = clResolveSearch.value.trim().toLowerCase();
+  clHeadingBtns.forEach(btn => {
+    const text = btn.querySelector('.cl-heading-text').textContent.toLowerCase();
+    btn.style.display = text.includes(q) ? '' : 'none';
+  });
+  // Show no results message if all hidden
+  const anyVisible = clHeadingBtns.some(btn => btn.style.display !== 'none');
+  let noMsg = clResolveHeadingList.querySelector('.cl-resolve-no-results');
+  if (!anyVisible) {
+    if (!noMsg) {
+      noMsg = document.createElement('div');
+      noMsg.className = 'cl-resolve-no-results cl-resolve-placeholder';
+      noMsg.textContent = 'No headings match.';
+      clResolveHeadingList.appendChild(noMsg);
     }
-
-    headings.forEach(h => {
-      const btn = document.createElement('button');
-      btn.className = 'popup-item';
-      btn.style.paddingLeft = `${8 + (h.level - 1) * 12}px`;
-      btn.innerHTML = `<span style="font-size:0.7rem;color:var(--muted);margin-right:6px;">H${h.level}</span><span>${escapeHtml(h.text)}</span>`;
-      btn.addEventListener('click', () => {
-        const resolved = h.id ? `${file.name}#${h.id}` : file.name;
-        applyResolvedLink(resolved);
-        clResolveModal.hidden = true;
-        clResolveTarget = null;
-      });
-      clResolveHeadingList.appendChild(btn);
-    });
-  };
-  reader.readAsText(file, 'utf-8');
+    noMsg.style.display = '';
+  } else {
+    if (noMsg) noMsg.style.display = 'none';
+  }
 });
 
 function openResolvePopup(resultIdx) {
   const r = clState.results[resultIdx];
-  clResolveModalTitle.textContent = `Resolve: ${r.tocText.trim()}`;
-  clResolveFileText.textContent   = 'Choose XHTML File';
-  clResolveHeadingList.innerHTML  = '';
-  clResolveFileInput.value        = '';
+  const statusLabel = r.status === 'unresolved' ? 'Resolve' : 'Change Link';
+  clResolveModalTitle.textContent = `${statusLabel}: ${r.tocText.trim()}`;
+  const clResolveModalTitle2 = document.getElementById('clResolveModalTitle2');
+  clResolveModalTitle2.textContent = r.tocText.trim();
+
+  clResolveFileSelect.innerHTML = '<option value="">-- Select a file --</option>';
+  clState.fileIndex.forEach(f => {
+    const opt = document.createElement('option');
+    opt.value = f.name;
+    opt.textContent = f.name;
+    clResolveFileSelect.appendChild(opt);
+  });
+  clResolveFileSelect.value = '';
+  clResolveHeadingList.innerHTML = '<div class="cl-resolve-placeholder">Select a file to see headings</div>';
+  clResolveSearch.value = '';
+  clHeadingBtns = [];
 
   // Find matching sidebar item and preview anchor
   const sidebarItems   = clResultsList.querySelectorAll('[data-result-idx]');
@@ -471,9 +642,6 @@ function applyResolvedLink(resolved) {
   // Update preview anchor color
   if (previewAnchor) {
     previewAnchor.setAttribute('href', resolved);
-    previewAnchor.style.color          = 'var(--success, #38a169)';
-    previewAnchor.style.textDecoration = 'none';
-    previewAnchor.style.pointerEvents  = 'none';
   }
 
   // Update sidebar item
@@ -484,12 +652,143 @@ function applyResolvedLink(resolved) {
     spans[1].textContent    = resolved;
   }
 
+  // Re-check duplicate hrefs across all results and re-apply/remove DUP styling
+  const dupeHrefs = findDuplicateHrefs(clState.results);
+  clDupeHrefs = dupeHrefs;
+
+  // Re-apply preview anchor styling based on updated duplicate set
+  clContentArea.querySelectorAll('a').forEach(a => {
+    const href = a.getAttribute('href');
+    a.style.outline = '';
+    a.style.borderRadius = '';
+    a.style.padding = '';
+    a.style.textDecorationColor = '';
+    if (!href || href === '{0}') {
+      a.style.color          = 'var(--danger, #e53e3e)';
+      a.style.textDecoration = 'line-through';
+      a.style.pointerEvents  = 'auto';
+      a.style.cursor         = 'pointer';
+    } else if (dupeHrefs.has(href)) {
+      a.style.color               = 'var(--warning, #d97706)';
+      a.style.textDecoration      = 'underline';
+      a.style.textDecorationColor = 'var(--warning, #d97706)';
+      a.style.outline             = '1px solid var(--warning, #d97706)';
+      a.style.borderRadius        = '3px';
+      a.style.padding             = '0 2px';
+      a.style.pointerEvents       = 'auto';
+      a.style.cursor              = 'pointer';
+      if (!a.dataset.clickBound) {
+        a.dataset.clickBound = '1';
+        a.addEventListener('click', e => {
+          e.preventDefault();
+          openResolvePopup(+a.dataset.resultIdx);
+        });
+      }
+    } else {
+      a.style.color          = 'var(--success, #38a169)';
+      a.style.textDecoration = 'none';
+      a.style.pointerEvents  = 'auto';
+      a.style.cursor         = 'pointer';
+    }
+
+    // Update inline file badge to reflect the (possibly new) href
+    const nextEl = a.nextSibling;
+    if (nextEl && nextEl.nodeType === 1 && nextEl.classList.contains('cl-file-badge')) {
+      nextEl.className = 'cl-file-badge';
+      if (!href || href === '{0}') {
+        nextEl.classList.add('unresolved');
+        nextEl.textContent = 'unresolved';
+      } else if (dupeHrefs.has(href)) {
+        nextEl.classList.add('duplicate');
+        const headingText = getHeadingText(href);
+        nextEl.textContent = headingText ? `→ ${headingText}` : href;
+      } else {
+        const headingText = getHeadingText(href);
+        nextEl.textContent = headingText ? `→ ${headingText}` : href;
+      }
+    }
+  });
+
+  // Refresh previewAnchor's event listeners (old ones reference stale href/resolved)
+  if (previewAnchor && previewAnchor.parentNode) {
+    const newAnchor = previewAnchor.cloneNode(true);
+    previewAnchor.parentNode.replaceChild(newAnchor, previewAnchor);
+
+    newAnchor.addEventListener('click', e => {
+      e.preventDefault();
+      openResolvePopup(clResolveTarget.resultIdx);
+    });
+
+    newAnchor.addEventListener('mouseenter', e => {
+      if (!resolved || resolved === '{0}') {
+        clTooltip.textContent = 'Unresolved — click to fix';
+        clTooltip.style.borderColor = 'var(--danger,#e53e3e)';
+      } else if (clDupeHrefs.has(resolved)) {
+        clTooltip.textContent = '⚠ Duplicate ID: ' + resolved;
+        clTooltip.style.borderColor = 'var(--warning,#d97706)';
+      } else {
+        clTooltip.textContent = '🔗 ' + resolved;
+        clTooltip.style.borderColor = 'var(--accent,#2B3A9C)';
+      }
+      clTooltip.style.display = 'block';
+      clTooltip.style.left = (e.clientX + 12) + 'px';
+      clTooltip.style.top  = (e.clientY - 28) + 'px';
+    });
+
+    newAnchor.addEventListener('mousemove', e => {
+      clTooltip.style.left = (e.clientX + 12) + 'px';
+      clTooltip.style.top  = (e.clientY - 28) + 'px';
+    });
+
+    newAnchor.addEventListener('mouseleave', () => {
+      clTooltip.style.display = 'none';
+    });
+
+    newAnchor.addEventListener('mouseenter', e => {
+      const idx = +newAnchor.dataset.resultIdx;
+      const sidebarItem = clResultsList.querySelector(`[data-result-idx="${idx}"]`);
+      if (sidebarItem) {
+        sidebarItem.style.background = 'var(--hover, rgba(43,58,156,0.08))';
+        sidebarItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    });
+    newAnchor.addEventListener('mouseleave', () => {
+      const idx = +newAnchor.dataset.resultIdx;
+      const sidebarItem = clResultsList.querySelector(`[data-result-idx="${idx}"]`);
+      if (sidebarItem) sidebarItem.style.background = '';
+    });
+
+    clResolveTarget.previewAnchor = newAnchor;
+  }
+
+  clResultsList.querySelectorAll('[data-result-idx]').forEach(el => {
+    const r = clState.results[+el.dataset.resultIdx];
+    const isDupe = r.resolved && dupeHrefs.has(r.resolved);
+    const firstSpan = el.querySelector('span');
+    const existingBadge = firstSpan ? firstSpan.querySelector('span') : null;
+    if (isDupe) {
+      el.style.borderLeft = '3px solid var(--warning, #d97706)';
+      el.style.background = 'var(--warning-bg, #fffbeb)';
+      el.title = 'This ID is linked to multiple TOC entries — verify manually';
+      if (firstSpan && !existingBadge) {
+        firstSpan.insertAdjacentHTML('beforeend', '<span style="background:var(--warning,#d97706);color:#fff;font-size:0.65rem;padding:1px 5px;border-radius:3px;margin-left:6px;">DUP</span>');
+      }
+    } else {
+      el.style.borderLeft = '';
+      el.style.background = '';
+      el.title = '';
+      if (existingBadge) existingBadge.remove();
+    }
+  });
+
   // Update stats
   const matched    = clState.results.filter(r => r.status === 'matched').length;
   const unresolved = clState.results.filter(r => r.status === 'unresolved').length;
   clStatMatched.textContent    = matched;
   clStatUnresolved.textContent = unresolved;
   clStatUnresolved.style.color = unresolved > 0 ? 'var(--fail)' : 'var(--pass)';
+  clStatDupe.textContent       = dupeHrefs.size;
+  updateProgressBar();
 
   toast(`Linked to ${resolved}`, 'success');
 }
@@ -526,6 +825,63 @@ clCopyReportBtn.addEventListener('click', () => {
   navigator.clipboard.writeText(lines.join('\n'))
     .then(() => toast('Report copied!', 'success'))
     .catch(() => toast('Copy failed.', 'error'));
+});
+
+/* ══════════════════════════════════
+   KEYBOARD SHORTCUTS
+══════════════════════════════════ */
+let clCurrentUnresolvedIdx = 0;
+
+document.addEventListener('keydown', e => {
+  if (clWorkspace.hidden !== false) return;
+
+  if (e.key === 'Escape') {
+    if (!clResolveModal.hidden) {
+      clResolveModal.hidden = true;
+      clResolveTarget = null;
+    }
+    return;
+  }
+
+  const tag = (e.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+
+  if (e.key === 'r' || e.key === 'R') {
+    clCurrentUnresolvedIdx = 0;
+    return;
+  }
+
+  if (e.key === 'n' || e.key === 'N') {
+    const unresolvedIdxs = clState.results
+      .map((r, i) => ({ r, i }))
+      .filter(o => o.r.status === 'unresolved' || clDupeHrefs.has(o.r.resolved))
+      .map(o => o.i);
+
+    if (!unresolvedIdxs.length) {
+      toast('No unresolved links', 'info');
+      return;
+    }
+
+    if (clCurrentUnresolvedIdx >= unresolvedIdxs.length) clCurrentUnresolvedIdx = 0;
+    const resultIdx = unresolvedIdxs[clCurrentUnresolvedIdx];
+    clCurrentUnresolvedIdx = (clCurrentUnresolvedIdx + 1) % unresolvedIdxs.length;
+
+    const isDupe = clState.results[resultIdx].status !== 'unresolved' && clDupeHrefs.has(clState.results[resultIdx].resolved);
+    const flashColor = isDupe ? 'var(--warning, #d97706)' : 'var(--accent, #2B3A9C)';
+
+    const anchor = clContentArea.querySelector(`a[data-result-idx="${resultIdx}"]`);
+    if (anchor) {
+      anchor.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      anchor.style.outline = `2px solid ${flashColor}`;
+      anchor.style.borderRadius = '3px';
+      setTimeout(() => {
+        anchor.style.outline = '';
+        anchor.style.borderRadius = '';
+      }, 1200);
+    }
+    const sidebarItem = clResultsList.querySelector(`[data-result-idx="${resultIdx}"]`);
+    if (sidebarItem) sidebarItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
 });
 
 /* ══════════════════════════════════

@@ -1302,3 +1302,238 @@ a.rle-citation.rle-highlight {
 .rle-extract-summary strong {
   color: var(--text);
 }
+
+.cl-file-badge {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  margin-left: 8px;
+  font-family: monospace;
+  opacity: 0.75;
+  vertical-align: middle;
+  pointer-events: none;
+  user-select: none;
+}
+.cl-file-badge.duplicate {
+  color: var(--warning, #d97706);
+  opacity: 1;
+}
+.cl-file-badge.unresolved {
+  color: var(--danger, #e53e3e);
+  opacity: 1;
+}
+
+.cl-resolve-modal {
+  width: 460px;
+  max-width: 100%;
+  max-height: 75vh;
+  display: flex;
+  flex-direction: column;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.cl-resolve-head {
+  background: var(--accent, #2B3A9C);
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cl-resolve-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cl-resolve-icon {
+  width: 16px;
+  height: 16px;
+  color: #fff;
+}
+
+.cl-resolve-head .popup-sel {
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.cl-resolve-head .popup-close {
+  color: #fff;
+  opacity: 0.8;
+}
+
+.cl-resolve-head .popup-close:hover {
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+  opacity: 1;
+}
+
+.cl-resolve-info {
+  background: var(--surface-2, #f0f4ff);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+}
+
+.cl-resolve-info-label {
+  color: var(--accent, #2B3A9C);
+  font-weight: 600;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.cl-resolve-info-value {
+  color: var(--text);
+  font-size: 0.78rem;
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cl-resolve-file-section {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cl-resolve-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cl-resolve-label .lucide {
+  width: 13px;
+  height: 13px;
+  color: var(--accent, #2B3A9C);
+}
+
+.cl-resolve-select {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.82rem;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.cl-resolve-select:focus {
+  border-color: var(--accent, #2B3A9C);
+  box-shadow: 0 0 0 2px rgba(43,58,156,0.12);
+}
+
+.cl-resolve-list-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border);
+}
+
+.cl-resolve-list-label .lucide {
+  width: 13px;
+  height: 13px;
+  color: var(--accent, #2B3A9C);
+}
+
+.cl-resolve-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.cl-resolve-search .lucide {
+  width: 13px;
+  height: 13px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.cl-resolve-search input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 0.8rem;
+  color: var(--text);
+}
+
+.cl-resolve-search input::placeholder {
+  color: var(--text-muted);
+}
+
+.cl-resolve-list {
+  flex: 1;
+  min-height: 0;
+  max-height: 280px;
+}
+
+.cl-resolve-placeholder {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-style: italic;
+}
+
+.popup-item.cl-heading-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.popup-item.cl-heading-item:hover {
+  background: var(--accent-soft, #eef0fb);
+  color: var(--accent, #2B3A9C);
+}
+
+.cl-heading-level {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent, #2B3A9C);
+  border-radius: 3px;
+  padding: 1px 5px;
+  min-width: 24px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.cl-heading-text {
+  font-size: 0.8rem;
+  flex: 1;
+}
+
+.cl-result-item:hover {
+  background: var(--hover, rgba(0,0,0,0.05));
+}
