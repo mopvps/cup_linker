@@ -355,47 +355,70 @@
       <!-- workspace (after upload) -->
       <div class="workspace" id="workspace1" hidden>
 
-        <!-- inner tabs -->
-        <div class="inner-tab-bar">
-          <button class="inner-tab-btn active" data-inner-tab="main">
-            <i data-lucide="file-text"></i><span>Main</span>
-          </button>
-          <button class="inner-tab-btn" data-inner-tab="summary">
-            <i data-lucide="list-checks"></i><span>Summary</span>
-          </button>
-        </div>
+        <div style="display:flex;flex:1;overflow:hidden;">
 
-        <!-- INNER TAB: MAIN -->
-        <div class="inner-tab-pane active" id="innerPaneMain">
-          <div class="doc-panel">
-            <div class="doc-preview preview-doc" id="docPreview"></div>
-          </div>
-        </div>
+          <!-- existing inner tabs wrapper -->
+          <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
 
-        <!-- INNER TAB: SUMMARY -->
-        <div class="inner-tab-pane" id="innerPaneSummary">
-          <div class="summary-toolbar">
-            <button class="btn-ghost" id="btnCopyChanges"><i data-lucide="clipboard-list"></i><span>Copy Changes</span></button>
-            <button class="btn-ghost" id="btnDownloadReport"><i data-lucide="table"></i><span>Download Report</span></button>
-          </div>
-          <div class="split-preview">
-            <div class="preview-panel">
-              <div class="panel-head">
-                <i data-lucide="type"></i>
-                <span class="panel-title">Body Superscripts</span>
-                <span class="panel-sub"><span class="panel-badge body-badge">BODY</span></span>
-              </div>
-              <div class="panel-list" id="bodySupsList"></div>
+            <!-- inner tabs -->
+            <div class="inner-tab-bar">
+              <button class="inner-tab-btn active" data-inner-tab="main">
+                <i data-lucide="file-text"></i><span>Main</span>
+              </button>
+              <button class="inner-tab-btn" data-inner-tab="summary">
+                <i data-lucide="list-checks"></i><span>Summary</span>
+              </button>
             </div>
-            <div class="preview-panel">
-              <div class="panel-head">
-                <i data-lucide="anchor"></i>
-                <span class="panel-title">Footnote Anchors</span>
-                <span class="panel-sub"><span class="panel-badge fn-badge">FOOTNOTES</span></span>
+
+            <!-- INNER TAB: MAIN -->
+            <div class="inner-tab-pane active" id="innerPaneMain">
+              <div class="doc-panel">
+                <div class="doc-preview preview-doc" id="docPreview"></div>
               </div>
-              <div class="panel-list" id="footnotesList"></div>
+            </div>
+
+            <!-- INNER TAB: SUMMARY -->
+            <div class="inner-tab-pane" id="innerPaneSummary">
+              <div class="summary-toolbar">
+                <button class="btn-ghost" id="btnCopyChanges"><i data-lucide="clipboard-list"></i><span>Copy Changes</span></button>
+                <button class="btn-ghost" id="btnDownloadReport"><i data-lucide="table"></i><span>Download Report</span></button>
+              </div>
+              <div class="split-preview">
+                <div class="preview-panel">
+                  <div class="panel-head">
+                    <i data-lucide="type"></i>
+                    <span class="panel-title">Body Superscripts</span>
+                    <span class="panel-sub"><span class="panel-badge body-badge">BODY</span></span>
+                  </div>
+                  <div class="panel-list" id="bodySupsList"></div>
+                </div>
+                <div class="preview-panel">
+                  <div class="panel-head">
+                    <i data-lucide="anchor"></i>
+                    <span class="panel-title">Footnote Anchors</span>
+                    <span class="panel-sub"><span class="panel-badge fn-badge">FOOTNOTES</span></span>
+                  </div>
+                  <div class="panel-list" id="footnotesList"></div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- NEW right sidebar -->
+          <div class="rle-sidebar" id="fn1Sidebar" style="width:260px;">
+            <div class="rle-sidebar-head">
+              <span class="rle-sidebar-title">Link Status</span>
+              <span class="rle-sidebar-count" id="fn1SidebarCount">0</span>
+            </div>
+            <div class="rle-sidebar-body" id="fn1SidebarBody">
+              <div class="rle-sidebar-empty" id="fn1SidebarEmpty">
+                <i data-lucide="link-2"></i>
+                <p>Process file to see link status</p>
+              </div>
             </div>
           </div>
+
         </div>
 
       </div>

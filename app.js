@@ -19,60 +19,60 @@ let state = {
 };
 
 /* ── DOM REFS ── */
-const fileInput1      = document.getElementById('fileInput1');
-const pickFile        = document.getElementById('pickFile');
-const fileBtnText     = document.getElementById('fileBtnText');
-const fileStatus      = document.getElementById('fileStatus');
-const step1           = document.getElementById('step1');
-const step2           = document.getElementById('step2');
-const prefixInput     = document.getElementById('prefixInput');
-const btnProcess      = document.getElementById('btnProcess');
-const progressFill    = document.getElementById('progressFill');
-const progressWrap    = document.getElementById('progressWrap');
-const progressPct     = document.getElementById('progressPct');
-const summaryBar      = document.getElementById('summaryBar');
-const fileBar         = document.getElementById('fileBar');
-const btnDownload     = document.getElementById('btnDownload');
-const btnCopyFile     = document.getElementById('btnCopyFile');
-const themeToggle     = document.getElementById('themeToggle');
-const themeIcon       = document.getElementById('themeIcon');
-const themeLabel      = document.getElementById('themeLabel');
+const fileInput1 = document.getElementById('fileInput1');
+const pickFile = document.getElementById('pickFile');
+const fileBtnText = document.getElementById('fileBtnText');
+const fileStatus = document.getElementById('fileStatus');
+const step1 = document.getElementById('step1');
+const step2 = document.getElementById('step2');
+const prefixInput = document.getElementById('prefixInput');
+const btnProcess = document.getElementById('btnProcess');
+const progressFill = document.getElementById('progressFill');
+const progressWrap = document.getElementById('progressWrap');
+const progressPct = document.getElementById('progressPct');
+const summaryBar = document.getElementById('summaryBar');
+const fileBar = document.getElementById('fileBar');
+const btnDownload = document.getElementById('btnDownload');
+const btnCopyFile = document.getElementById('btnCopyFile');
+const themeToggle = document.getElementById('themeToggle');
+const themeIcon = document.getElementById('themeIcon');
+const themeLabel = document.getElementById('themeLabel');
 
-const emptyState1     = document.getElementById('emptyState1');
-const workspace1      = document.getElementById('workspace1');
-const fileTitleDisplay= document.getElementById('fileTitleDisplay');
+const emptyState1 = document.getElementById('emptyState1');
+const workspace1 = document.getElementById('workspace1');
+const fileTitleDisplay = document.getElementById('fileTitleDisplay');
 
-const statSupsFound   = document.getElementById('statSupsFound');
-const statFnFound     = document.getElementById('statFnFound');
-const statMatched     = document.getElementById('statMatched');
-const statUnmatched   = document.getElementById('statUnmatched');
+const statSupsFound = document.getElementById('statSupsFound');
+const statFnFound = document.getElementById('statFnFound');
+const statMatched = document.getElementById('statMatched');
+const statUnmatched = document.getElementById('statUnmatched');
 
-const bodySupsList    = document.getElementById('bodySupsList');
-const footnotesList   = document.getElementById('footnotesList');
+const bodySupsList = document.getElementById('bodySupsList');
+const footnotesList = document.getElementById('footnotesList');
 
-const docPreview       = document.getElementById('docPreview');
-const innerPaneMain    = document.getElementById('innerPaneMain');
+const docPreview = document.getElementById('docPreview');
+const innerPaneMain = document.getElementById('innerPaneMain');
 const innerPaneSummary = document.getElementById('innerPaneSummary');
 
-const btnCopyChanges   = document.getElementById('btnCopyChanges');
-const btnDownloadReport= document.getElementById('btnDownloadReport');
+const btnCopyChanges = document.getElementById('btnCopyChanges');
+const btnDownloadReport = document.getElementById('btnDownloadReport');
 
-const ctxMenu          = document.getElementById('ctxMenu');
-const ctxDelete        = document.getElementById('ctxDelete');
-const ctxChange        = document.getElementById('ctxChange');
+const ctxMenu = document.getElementById('ctxMenu');
+const ctxDelete = document.getElementById('ctxDelete');
+const ctxChange = document.getElementById('ctxChange');
 
-const badgeTooltip     = document.getElementById('badgeTooltip');
+const badgeTooltip = document.getElementById('badgeTooltip');
 
-const changeModal       = document.getElementById('changeModal');
-const changeModalClose  = document.getElementById('changeModalClose');
+const changeModal = document.getElementById('changeModal');
+const changeModalClose = document.getElementById('changeModalClose');
 const changeSearchInput = document.getElementById('changeSearchInput');
-const changeFnList      = document.getElementById('changeFnList');
-const changeModalSel    = document.getElementById('changeModalSel');
+const changeFnList = document.getElementById('changeFnList');
+const changeModalSel = document.getElementById('changeModalSel');
 
 let contextTarget = null; // { role, num }
 let changeTargetNum = null;
 
-const toastStack      = document.getElementById('toastStack');
+const toastStack = document.getElementById('toastStack');
 
 /* ── LUCIDE ICONS ──
    Re-runs after any markup that adds <i data-lucide="..."> nodes. */
@@ -176,18 +176,18 @@ function loadFile(file) {
 
     // Reveal the workspace immediately so the preview is visible before processing
     emptyState1.hidden = true;
-    workspace1.hidden  = false;
-    fileBar.hidden     = false;
+    workspace1.hidden = false;
+    fileBar.hidden = false;
     fileTitleDisplay.textContent = file.name;
 
     // Pre-scan so the pre-process preview shows correct badge colours
     const pre = scanPreLinked(state.rawContent);
     state.preLinkedBodyNums = pre.preBody;
-    state.preLinkedFnNums   = pre.preFn;
-    state.fnTextMap         = scanFootnoteTexts(state.rawContent);
-    state.processedContent  = '';
+    state.preLinkedFnNums = pre.preFn;
+    state.fnTextMap = scanFootnoteTexts(state.rawContent);
+    state.processedContent = '';
     state.bodyNums = [];
-    state.fnNums   = [];
+    state.fnNums = [];
     summaryBar.hidden = true;
 
     renderDocPreview(state.rawContent);
@@ -209,7 +209,7 @@ btnProcess.addEventListener('click', () => {
   animateProgress(() => {
     try {
       processFile();
-    } catch(err) {
+    } catch (err) {
       toast('Error processing file: ' + err.message, 'error');
       console.error(err);
     }
@@ -224,17 +224,17 @@ function processFile() {
   // Snapshot which sups were already linked BEFORE we touch anything (for badge status + report)
   const pre = scanPreLinked(content);
   state.preLinkedBodyNums = pre.preBody;
-  state.preLinkedFnNums   = pre.preFn;
-  state.fnTextMap         = scanFootnoteTexts(content);
+  state.preLinkedFnNums = pre.preFn;
+  state.fnTextMap = scanFootnoteTexts(content);
 
   const changes = [];
 
   // ── STEP 1: Find all body sup numbers (outside footnotes section)
   // We split the doc into body part and footnotes part for safety
-  const fnSectionMatch = content.match(/<section[^>]*class="[^"]*footnotes[^"]*"[^>]*>[\s\S]*/i);
-  const bodyPart   = fnSectionMatch ? content.slice(0, content.indexOf(fnSectionMatch[0])) : content;
-  const fnPart     = fnSectionMatch ? fnSectionMatch[0] : '';
-  const fnOffset   = fnSectionMatch ? content.indexOf(fnSectionMatch[0]) : content.length;
+  const fnSectionMatch = content.match(/<section[^>]*>\s*\r?\n\s*<h[1-6][^>]*>\s*\r?\n\s*<sc>notes<\/sc>[\s\S]*/i);
+  const bodyPart = fnSectionMatch ? content.slice(0, content.indexOf(fnSectionMatch[0])) : content;
+  const fnPart = fnSectionMatch ? fnSectionMatch[0] : '';
+  const fnOffset = fnSectionMatch ? content.indexOf(fnSectionMatch[0]) : content.length;
 
   // Collect all sup numbers from body
   // Matches: <sup>\n  1  \n</sup>  OR  <sup>4</sup>
@@ -257,7 +257,7 @@ function processFile() {
 
   // Collect all footnote li sup numbers
   const fnNums = [];
-  const fnLiRegex = /<li[^>]*class="[^"]*fn[^"]*"[^>]*>([\s\S]*?)<\/li>/gi;
+  const fnLiRegex = /<li[^>]*>([\s\S]*?)<\/li>/gi;
   const fnLiMatches = [];
   while ((m = fnLiRegex.exec(fnPart)) !== null) {
     // Find sup number inside this li
@@ -273,7 +273,7 @@ function processFile() {
   }
 
   state.bodyNums = bodyNums;
-  state.fnNums   = fnNums;
+  state.fnNums = fnNums;
 
   // ── STEP 2: Build ID maps
   // Body sup:      id="ch3_xfn1"  href="#ch3_fn1"
@@ -286,7 +286,7 @@ function processFile() {
   for (const item of sortedBodyMatches) {
     const num = item.num;
     const xfnId = `${prefix}_xfn${num}`;
-    const fnId  = `${prefix}_fn${num}`;
+    const fnId = `${prefix}_fn${num}`;
     const replacement = `<sup>\n<a id="${xfnId}" href="#${fnId}">${num}</a>\n</sup>`;
     newBodyPart = newBodyPart.slice(0, item.index) + replacement + newBodyPart.slice(item.index + item.full.length);
     changes.push({ line: lineNumberAt(content, item.index), before: item.full, after: replacement });
@@ -299,7 +299,7 @@ function processFile() {
   for (const item of sortedFnMatches) {
     const num = item.num;
     const xfnId = `${prefix}_xfn${num}`;
-    const fnId  = `${prefix}_fn${num}`;
+    const fnId = `${prefix}_fn${num}`;
 
     let newLi = item.fullLi;
 
@@ -332,12 +332,12 @@ function lineNumberAt(content, index) {
 
 /* ── PRE-SCAN: which sups already had an <a> before we processed ── */
 function scanPreLinked(content) {
-  const fnSectionMatch = content.match(/<section[^>]*class="[^"]*footnotes[^"]*"[^>]*>[\s\S]*/i);
+  const fnSectionMatch = content.match(/<section[^>]*>\s*\r?\n\s*<h[1-6][^>]*>\s*\r?\n\s*<sc>notes<\/sc>[\s\S]*/i);
   const bodyPart = fnSectionMatch ? content.slice(0, content.indexOf(fnSectionMatch[0])) : content;
-  const fnPart   = fnSectionMatch ? fnSectionMatch[0] : '';
+  const fnPart = fnSectionMatch ? fnSectionMatch[0] : '';
 
   const preBody = new Set();
-  const preFn   = new Set();
+  const preFn = new Set();
   let mm;
 
   const supRe = /<sup>([\s\S]*?)<\/sup>/gi;
@@ -361,7 +361,7 @@ function scanPreLinked(content) {
 
 /* ── FOOTNOTE TEXT MAP (num -> plain text snippet) ── */
 function scanFootnoteTexts(content) {
-  const fnSectionMatch = content.match(/<section[^>]*class="[^"]*footnotes[^"]*"[^>]*>[\s\S]*/i);
+  const fnSectionMatch = content.match(/<section[^>]*>\s*\r?\n\s*<h[1-6][^>]*>\s*\r?\n\s*<sc>notes<\/sc>[\s\S]*/i);
   const fnPart = fnSectionMatch ? fnSectionMatch[0] : '';
   const map = {};
 
@@ -390,8 +390,8 @@ function renderWorkspace() {
 
   // Show workspace
   emptyState1.hidden = true;
-  workspace1.hidden  = false;
-  fileBar.hidden     = false;
+  workspace1.hidden = false;
+  fileBar.hidden = false;
 
   // Stats + summary lists
   renderStatsAndLists();
@@ -407,7 +407,7 @@ function renderWorkspace() {
 
   // Toast
   const unmatched = Number(statUnmatched.textContent);
-  const matched   = Number(statMatched.textContent);
+  const matched = Number(statMatched.textContent);
   if (unmatched > 0) {
     toast(`Done! ⚠️ ${unmatched} unmatched sup(s) found.`, 'warning');
   } else {
@@ -421,10 +421,10 @@ function renderWorkspace() {
    never trust stale counts left over from a previous render. */
 function updateStats() {
   const { bodyNums, fnNums } = state;
-  const fnSet   = new Set(fnNums);
+  const fnSet = new Set(fnNums);
   const bodySet = new Set(bodyNums);
 
-  const matched   = bodyNums.filter(n => fnSet.has(n)).length;
+  const matched = bodyNums.filter(n => fnSet.has(n)).length;
   const unmatched = bodyNums.filter(n => !fnSet.has(n)).length + fnNums.filter(n => !bodySet.has(n)).length;
 
   console.log('bodyNums:', bodyNums);
@@ -432,10 +432,10 @@ function updateStats() {
   console.log('matched:', matched);
   console.log('unmatched:', unmatched);
 
-  statSupsFound.textContent  = bodyNums.length;
-  statFnFound.textContent    = fnNums.length;
-  statMatched.textContent    = matched;
-  statUnmatched.textContent  = unmatched;
+  statSupsFound.textContent = bodyNums.length;
+  statFnFound.textContent = fnNums.length;
+  statMatched.textContent = matched;
+  statUnmatched.textContent = unmatched;
 
   return { matched, unmatched };
 }
@@ -443,7 +443,7 @@ function updateStats() {
 /* ── STATS BAR + SUMMARY LISTS ── */
 function renderStatsAndLists() {
   const { bodyNums, fnNums, prefix } = state;
-  const fnSet   = new Set(fnNums);
+  const fnSet = new Set(fnNums);
   const bodySet = new Set(bodyNums);
 
   updateStats();
@@ -452,7 +452,7 @@ function renderStatsAndLists() {
   bodyNums.forEach(num => {
     const isMatched = fnSet.has(num);
     const xfnId = `${prefix}_xfn${num}`;
-    const fnId  = `${prefix}_fn${num}`;
+    const fnId = `${prefix}_fn${num}`;
     bodySupsList.appendChild(createLinkItem(num, xfnId, `#${fnId}`, isMatched, 'body'));
   });
 
@@ -460,9 +460,70 @@ function renderStatsAndLists() {
   fnNums.forEach(num => {
     const isMatched = bodySet.has(num);
     const xfnId = `${prefix}_xfn${num}`;
-    const fnId  = `${prefix}_fn${num}`;
+    const fnId = `${prefix}_fn${num}`;
     footnotesList.appendChild(createLinkItem(num, fnId, `#${xfnId}`, isMatched, 'fn'));
   });
+
+  renderFn1Sidebar();
+}
+
+/* ── TAB 1 RIGHT SIDEBAR: link status per body sup ── */
+function renderFn1Sidebar() {
+  const sidebarBody = document.getElementById('fn1SidebarBody');
+  const sidebarCount = document.getElementById('fn1SidebarCount');
+  const sidebarEmpty = document.getElementById('fn1SidebarEmpty');
+  if (!sidebarBody || !sidebarCount) return;
+
+  const { bodyNums, fnNums, prefix } = state;
+  const fnSet = new Set(fnNums);
+
+  sidebarCount.textContent = bodyNums.length;
+
+  if (!bodyNums.length) {
+    sidebarBody.innerHTML = '';
+    if (sidebarEmpty) sidebarBody.appendChild(sidebarEmpty);
+    else sidebarBody.innerHTML = '<div class="rle-sidebar-empty" id="fn1SidebarEmpty"><i data-lucide="link-2"></i><p>Process file to see link status</p></div>';
+    if (window.lucide) lucide.createIcons();
+    return;
+  }
+
+  const connected = bodyNums.filter(num => fnSet.has(num));
+  const missing = bodyNums.filter(num => !fnSet.has(num));
+
+  sidebarBody.innerHTML = '';
+
+  [...connected, ...missing].forEach(num => {
+    const isConnected = fnSet.has(num);
+    const xfnId = `${prefix}_xfn${num}`;
+    const fnId = `${prefix}_fn${num}`;
+
+    const item = document.createElement('div');
+    item.className = 'rle-citation-item';
+
+    const badge = document.createElement('span');
+    badge.className = 'rle-sidebar-num';
+    badge.textContent = num;
+
+    const body = document.createElement('div');
+    body.className = 'rle-citation-item-body';
+
+    const status = document.createElement('div');
+    status.className = 'rle-citation-author';
+    status.textContent = isConnected ? '✓ Connected' : '✗ Missing';
+    status.style.color = isConnected ? 'var(--success, #22c55e)' : 'var(--danger, #ef4444)';
+
+    const idLine = document.createElement('div');
+    idLine.className = 'rle-citation-href';
+    idLine.textContent = `${xfnId} → #${fnId}`;
+
+    body.appendChild(status);
+    body.appendChild(idLine);
+    item.appendChild(badge);
+    item.appendChild(body);
+    sidebarBody.appendChild(item);
+  });
+
+  if (window.lucide) lucide.createIcons();
 }
 
 /* ── DOC PREVIEW (Main inner tab) ── */
@@ -474,22 +535,22 @@ function renderDocPreview(content) {
   let bodyHTML = bodyMatch ? bodyMatch[1] : content;
 
   // Split into body part / footnotes part, same rule as processFile()
-  const fnSectionMatch = bodyHTML.match(/<section[^>]*class="[^"]*footnotes[^"]*"[^>]*>[\s\S]*/i);
+  const fnSectionMatch = bodyHTML.match(/<section[^>]*>\s*\r?\n\s*<h[1-6][^>]*>\s*\r?\n\s*<sc>notes<\/sc>[\s\S]*/i);
   let bodyOnly = fnSectionMatch ? bodyHTML.slice(0, bodyHTML.indexOf(fnSectionMatch[0])) : bodyHTML;
-  let fnOnly   = fnSectionMatch ? fnSectionMatch[0] : '';
+  let fnOnly = fnSectionMatch ? fnSectionMatch[0] : '';
 
   bodyOnly = replaceSupsWithBadges(bodyOnly, 'body');
-  fnOnly   = replaceSupsWithBadges(fnOnly, 'fn');
+  fnOnly = replaceSupsWithBadges(fnOnly, 'fn');
 
   docPreview.innerHTML = bodyOnly + fnOnly;
 
   // Collect full num sets actually rendered (covers already-linked sups too)
   const bodyBadges = [...docPreview.querySelectorAll('.sup-badge[data-role="body"]')];
-  const fnBadges   = [...docPreview.querySelectorAll('.sup-badge[data-role="fn"]')];
+  const fnBadges = [...docPreview.querySelectorAll('.sup-badge[data-role="fn"]')];
   const bodyNumSet = new Set(bodyBadges.map(b => b.dataset.num));
-  const fnNumSet   = new Set(fnBadges.map(b => b.dataset.num));
+  const fnNumSet = new Set(fnBadges.map(b => b.dataset.num));
   state.allBodyNums = bodyNumSet;
-  state.allFnNums   = fnNumSet;
+  state.allFnNums = fnNumSet;
 
   function applyStatus(badge, isBody) {
     const num = badge.dataset.num;
@@ -505,7 +566,7 @@ function renderDocPreview(content) {
   // Wire up badge interactions
   [...bodyBadges, ...fnBadges].forEach(badge => {
     badge.addEventListener('click', () => {
-      const num  = badge.dataset.num;
+      const num = badge.dataset.num;
       const role = badge.dataset.role;
       const targetRole = role === 'body' ? 'fn' : 'body';
       const target = docPreview.querySelector(`.sup-badge[data-num="${num}"][data-role="${targetRole}"]`);
@@ -564,9 +625,9 @@ function replaceSupsWithBadges(html, role) {
 
     if (!/<a[\s>]/i.test(inner)) return `<sup>${num}</sup>`; // unlinked -> plain, no badge
 
-    const idMatch   = inner.match(/id="([^"]*)"/);
+    const idMatch = inner.match(/id="([^"]*)"/);
     const hrefMatch = inner.match(/href="([^"]*)"/);
-    const idAttr   = idMatch ? idMatch[1] : '';
+    const idAttr = idMatch ? idMatch[1] : '';
     const hrefAttr = hrefMatch ? hrefMatch[1] : '';
     return `<span class="sup-badge sup-${role}" data-num="${num}" data-role="${role}" data-id="${escapeHtml(idAttr)}" data-href="${escapeHtml(hrefAttr)}">${num}</span>`;
   });
@@ -587,10 +648,10 @@ function openContextMenu(e, badge) {
   const menuH = ctxMenu.offsetHeight || 80;
   let x = e.clientX;
   let y = e.clientY;
-  if (x + menuW > window.innerWidth)  x = window.innerWidth - menuW - 8;
+  if (x + menuW > window.innerWidth) x = window.innerWidth - menuW - 8;
   if (y + menuH > window.innerHeight) y = window.innerHeight - menuH - 8;
   ctxMenu.style.left = x + window.scrollX + 'px';
-  ctxMenu.style.top  = y + window.scrollY + 'px';
+  ctxMenu.style.top = y + window.scrollY + 'px';
 }
 function closeContextMenu() {
   ctxMenu.hidden = true;
@@ -622,8 +683,8 @@ ctxChange.addEventListener('click', () => {
 
 /* ── HOVER TOOLTIP ── */
 function showTooltip(e, badge) {
-  const num  = badge.dataset.num;
-  const id   = badge.dataset.id;
+  const num = badge.dataset.num;
+  const id = badge.dataset.id;
   const href = badge.dataset.href;
   const fnText = (state.fnTextMap[num] || '').slice(0, 80);
 
@@ -640,14 +701,14 @@ function showTooltip(e, badge) {
   const ttH = badgeTooltip.offsetHeight;
 
   let left = rect.left;
-  let top  = rect.bottom + 6;
+  let top = rect.bottom + 6;
 
   if (left + ttW > window.innerWidth) left = window.innerWidth - ttW - 8;
   if (left < 8) left = 8;
   if (top + ttH > window.innerHeight) top = rect.top - ttH - 6; // flip above
 
   badgeTooltip.style.left = left + 'px';
-  badgeTooltip.style.top  = top + 'px';
+  badgeTooltip.style.top = top + 'px';
 }
 function hideTooltip() {
   badgeTooltip.hidden = true;
@@ -662,10 +723,10 @@ function deleteLink(role, num, recordHistory = true) {
   const beforeSnap = recordHistory ? snapshotState() : null;
   const beforeInfo = recordHistory ? getBadgeInfo(role, num) : null;
 
-  const fnSectionMatch = state.processedContent.match(/<section[^>]*class="[^"]*footnotes[^"]*"[^>]*>[\s\S]*/i);
+  const fnSectionMatch = state.processedContent.match(/<section[^>]*>\s*\r?\n\s*<h[1-6][^>]*>\s*\r?\n\s*<sc>notes<\/sc>[\s\S]*/i);
   const fnIdx = fnSectionMatch ? state.processedContent.indexOf(fnSectionMatch[0]) : state.processedContent.length;
   let bodyPart = state.processedContent.slice(0, fnIdx);
-  let fnPart   = state.processedContent.slice(fnIdx);
+  let fnPart = state.processedContent.slice(fnIdx);
 
   const stripAnchor = (full, inner) => {
     const text = inner.replace(/<[^>]*>/g, '').trim();
@@ -676,13 +737,13 @@ function deleteLink(role, num, recordHistory = true) {
 
   // Strip on both sides — deleting a link removes it for the sup AND its counterpart
   bodyPart = bodyPart.replace(/<sup>([\s\S]*?)<\/sup>/gi, stripAnchor);
-  fnPart   = fnPart.replace(/<sup>([\s\S]*?)<\/sup>/gi, stripAnchor);
+  fnPart = fnPart.replace(/<sup>([\s\S]*?)<\/sup>/gi, stripAnchor);
 
   state.processedContent = bodyPart + fnPart;
 
   // Drop the entry from both summary panels / stats entirely
   state.bodyNums = state.bodyNums.filter(n => n !== num);
-  state.fnNums   = state.fnNums.filter(n => n !== num);
+  state.fnNums = state.fnNums.filter(n => n !== num);
   state.preLinkedBodyNums.delete(num);
   state.preLinkedFnNums.delete(num);
 
@@ -702,7 +763,7 @@ function changeLink(num, newFnNum, recordHistory = true) {
   const beforeInfo = recordHistory ? getBadgeInfo('body', num) : null;
 
   const prefix = state.prefix;
-  const fnSectionMatch = state.processedContent.match(/<section[^>]*class="[^"]*footnotes[^"]*"[^>]*>[\s\S]*/i);
+  const fnSectionMatch = state.processedContent.match(/<section[^>]*>\s*\r?\n\s*<h[1-6][^>]*>\s*\r?\n\s*<sc>notes<\/sc>[\s\S]*/i);
   const fnIdx = fnSectionMatch ? state.processedContent.indexOf(fnSectionMatch[0]) : state.processedContent.length;
   let bodyPart = state.processedContent.slice(0, fnIdx);
   const fnPart = state.processedContent.slice(fnIdx);
@@ -712,7 +773,7 @@ function changeLink(num, newFnNum, recordHistory = true) {
     const m = text.match(/\d+/);
     if (m && m[0] === num) {
       const xfnId = `${prefix}_xfn${num}`;
-      const fnId  = `${prefix}_fn${newFnNum}`;
+      const fnId = `${prefix}_fn${newFnNum}`;
       return `<sup>\n<a id="${xfnId}" href="#${fnId}">${num}</a>\n</sup>`;
     }
     return full;
@@ -741,11 +802,11 @@ function snapshotState() {
 }
 
 function applySnapshot(snap) {
-  state.processedContent  = snap.processedContent;
-  state.bodyNums          = [...snap.bodyNums];
-  state.fnNums            = [...snap.fnNums];
+  state.processedContent = snap.processedContent;
+  state.bodyNums = [...snap.bodyNums];
+  state.fnNums = [...snap.fnNums];
   state.preLinkedBodyNums = new Set(snap.preLinkedBodyNums);
-  state.preLinkedFnNums   = new Set(snap.preLinkedFnNums);
+  state.preLinkedFnNums = new Set(snap.preLinkedFnNums);
   renderDocPreview(state.processedContent);
   renderStatsAndLists();
 }
@@ -884,11 +945,11 @@ btnDownloadReport.addEventListener('click', () => {
   const rows = [['Sup Number', 'Body ID', 'Body Href', 'Footnote ID', 'Footnote Href', 'Status', 'Already Linked']];
   allNums.forEach(num => {
     const bodyPresent = state.allBodyNums.has(num);
-    const fnPresent   = state.allFnNums.has(num);
-    const bodyId   = bodyPresent ? `${prefix}_xfn${num}` : '';
+    const fnPresent = state.allFnNums.has(num);
+    const bodyId = bodyPresent ? `${prefix}_xfn${num}` : '';
     const bodyHref = bodyPresent ? `#${prefix}_fn${num}` : '';
-    const fnId     = fnPresent ? `${prefix}_fn${num}` : '';
-    const fnHref   = fnPresent ? `#${prefix}_xfn${num}` : '';
+    const fnId = fnPresent ? `${prefix}_fn${num}` : '';
+    const fnHref = fnPresent ? `#${prefix}_xfn${num}` : '';
     const status = (bodyPresent && fnPresent) ? 'Matched' : 'Unmatched';
     const alreadyLinked = (state.preLinkedBodyNums.has(num) || state.preLinkedFnNums.has(num)) ? 'Yes' : 'No';
     rows.push([num, bodyId, bodyHref, fnId, fnHref, status, alreadyLinked]);
@@ -896,9 +957,9 @@ btnDownloadReport.addEventListener('click', () => {
 
   const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href     = url;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
   const base = state.fileName.replace(/\.[^.]+$/, '') || 'report';
   a.download = `${base}_report.csv`;
   a.click();
@@ -970,9 +1031,9 @@ btnDownload.addEventListener('click', () => {
   if (!state.processedContent) { toast('Nothing to download yet.', 'error'); return; }
 
   const blob = new Blob([state.processedContent], { type: 'application/xhtml+xml;charset=utf-8' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href     = url;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
   a.download = state.fileName.replace(/(\.[^.]+)$/, '_linked$1');
   a.click();
   URL.revokeObjectURL(url);
@@ -1004,7 +1065,7 @@ btnCopyFile.addEventListener('click', () => {
 function animateProgress(callback) {
   const setPct = (p) => {
     progressFill.style.width = p + '%';
-    progressPct.textContent  = Math.round(p) + '%';
+    progressPct.textContent = Math.round(p) + '%';
   };
 
   setPct(0);
@@ -1037,7 +1098,7 @@ function toast(msg, type = 'success') {
   const el = document.createElement('div');
   el.className = `toast ${type}`;
   el.innerHTML = `<i class="t-icon" data-lucide="${TOAST_ICONS[type] || 'info'}"></i>` +
-                 `<span class="t-msg"></span>`;
+    `<span class="t-msg"></span>`;
   el.querySelector('.t-msg').textContent = msg;
   toastStack.appendChild(el);
   drawIcons();
