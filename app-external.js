@@ -1,16 +1,16 @@
 'use strict';
 
-/* ── EXTERNAL STATE ── */
+/* ── STATE ── */
 let extState = {
   extFileName: '',
   extRawContent: '',
   extPrefix: '',
-  extSections: [],        // [{ label: 'CHAPTER 1', id: 'app1_sec1', items: [{ num: '1', text: '...' }] }]
-  selectedSection: null,  // the chosen section object
+  extSections: [],
+  selectedSection: null,
   bodyFileName: '',
   bodyRawContent: '',
-  bodyNums: [],           // sup numbers found in body file
-  isFlatList: false,      // true if no sections detected
+  bodyNums: [],
+  isFlatList: false,
   processedBody: '',
   processedExt: '',
 };
@@ -23,16 +23,16 @@ const extFileStatus    = document.getElementById('extFileStatus');
 const extFileCheck     = document.getElementById('extFileCheck');
 const extStep1         = document.getElementById('extStep1');
 
+const extStep2         = document.getElementById('extStep2');
+const extSectionSelect = document.getElementById('extSectionSelect');
+const extSectionStatus = document.getElementById('extSectionStatus');
+const extSectionCheck  = document.getElementById('extSectionCheck');
+
 const extPrefixStep    = document.getElementById('extPrefixStep');
 const extPrefixInput   = document.getElementById('extPrefixInput');
 const extPrefixStatus  = document.getElementById('extPrefixStatus');
 const extPrefixCheck   = document.getElementById('extPrefixCheck');
 const btnConfirmPrefix = document.getElementById('btnConfirmPrefix');
-
-const extStep2         = document.getElementById('extStep2');
-const extSectionSelect = document.getElementById('extSectionSelect');
-const extSectionStatus = document.getElementById('extSectionStatus');
-const extSectionCheck  = document.getElementById('extSectionCheck');
 
 const extStep3         = document.getElementById('extStep3');
 const pickBodyFile     = document.getElementById('pickBodyFile');
@@ -44,7 +44,7 @@ const bodyFileCheck    = document.getElementById('extBodyCheck');
 const btnProcessExt    = document.getElementById('btnProcessExt');
 
 /* ══════════════════════════════════════
-   STEP 1 — Upload External File
+   STEP 1 — Upload Footnote File
 ══════════════════════════════════════ */
 pickExtFile.addEventListener('click', () => extFileInput.click());
 
@@ -60,16 +60,10 @@ extFileInput.addEventListener('change', () => {
   reader.onload = (e) => {
     extState.extRawContent = e.target.result;
 
-    // Auto-detect ID prefix
-    const detectedPrefix = detectIdPrefix(extState.extRawContent);
-    extState.extPrefix = detectedPrefix;
-    extPrefixInput.value = detectedPrefix;
-
-    if (detectedPrefix) {
-      extPrefixStatus.textContent = `Detected: "${detectedPrefix}" — sections will be found by id starting with this prefix + number (1→n). Edit if wrong.`;
-    } else {
-      extPrefixStatus.textContent = 'Could not auto-detect — enter the prefix manually. Example: if ids are "bm1section1", "bm1section2" → prefix is "bm1section"';
-    }
+    // Scan sections from heading structure (no prefix needed yet)
+    const result = scanSectionsFromHeadings(extState.extRawContent);
+    extState.extSections = result.sections;
+    extState.isFlatList  = result.isFlatList;
 
     extFileStatus.textContent = 'File loaded';
     extFileStatus.classList.add('ok');
@@ -77,102 +71,35 @@ extFileInput.addEventListener('change', () => {
     extStep1.classList.add('done');
     pickExtFile.classList.add('selected');
 
-    // Show prefix verify step
-    extPrefixStep.hidden = false;
+    // Populate section dropdown and show step 2
+    populateSectionDropdown(result);
+    extStep2.hidden = false;
 
-    toast(`External file loaded: ${file.name}`, 'success');
+    toast(`Footnote file loaded: ${file.name}`, 'success');
   };
   reader.readAsText(file, 'utf-8');
 });
 
 /* ══════════════════════════════════════
-   STEP 1b — Detect ID Prefix
+   SECTION SCANNER — no prefix required
+   Detects sections by any heading with an id ending in a number
 ══════════════════════════════════════ */
-
-/* Scans all heading ids in the file and extracts the common prefix
-   e.g. id="app1_sec1", id="app1_sec2" → "app1"
-   e.g. id="bm1_sec1", id="bm1_sec2"  → "bm1"  */
-function detectIdPrefix(content) {
-  const parser = new DOMParser();
-  const doc    = parser.parseFromString(content, 'application/xhtml+xml');
-  const headings = [...doc.querySelectorAll('h1,h2,h3,h4,h5,h6')];
-
-  const ids = headings
-    .map(h => h.getAttribute('id'))
-    .filter(Boolean)
-    .filter(id => /\d+$/.test(id)); // only ids that end with a number
-
-  if (!ids.length) return '';
-
-  // Strip trailing digits to get the prefix
-  // e.g. "app1_sec3"  → "app1_sec"
-  // e.g. "bm1section3" → "bm1section"
-  // e.g. "bm1-section3" → "bm1-section"
-  const candidate = ids[0].replace(/\d+$/, '');
-
-  if (!candidate) return '';
-
-  // Verify at least 2 headings share this prefix
-  const matches = ids.filter(id => id.startsWith(candidate) && /\d+$/.test(id));
-  if (matches.length < 2) return '';
-
-  return candidate;
-}
-
-btnConfirmPrefix.addEventListener('click', () => {
-  const prefix = extPrefixInput.value.trim();
-  if (!prefix) {
-    toast('Please enter an ID prefix.', 'error');
-    return;
-  }
-
-  extState.extPrefix = prefix;
-  extPrefixCheck.style.opacity = '1';
-  extPrefixStep.classList.add('done');
-
-  // Now scan sections using confirmed prefix
-  const result = scanSections(extState.extRawContent, prefix);
-  extState.extSections  = result.sections;
-  extState.isFlatList   = result.isFlatList;
-
-  // Populate section dropdown
-  populateSectionDropdown(result);
-
-  // Show step 2
-  extStep2.hidden = false;
-
-  toast(`Prefix confirmed: "${prefix}"`, 'success');
-});
-
-/* ══════════════════════════════════════
-   SECTION SCANNER
-══════════════════════════════════════ */
-
-/* Scans the external file for sections using the confirmed prefix.
-   Returns { sections, isFlatList } */
-function scanSections(content, prefix) {
+function scanSectionsFromHeadings(content) {
   const parser = new DOMParser();
   const doc    = parser.parseFromString(content, 'application/xhtml+xml');
 
-  // Find all headings whose id:
-  // 1. Starts with the confirmed prefix
-  // 2. Ends with a number (1→n)
-  // No separator assumed — works for any pattern
   const sectionHeadings = [...doc.querySelectorAll('h1,h2,h3,h4,h5,h6')]
     .filter(el => {
       const id = el.getAttribute('id');
-      return id &&
-             id.startsWith(prefix) &&
-             /\d+$/.test(id);
+      return id && /\d+$/.test(id);
     })
     .sort((a, b) => {
-      // Sort by trailing number ascending (1→n)
-      const numA = parseInt(a.getAttribute('id').replace(prefix, ''), 10);
-      const numB = parseInt(b.getAttribute('id').replace(prefix, ''), 10);
-      return numA - numB;
+      const nA = parseInt(a.getAttribute('id').match(/(\d+)$/)[1], 10);
+      const nB = parseInt(b.getAttribute('id').match(/(\d+)$/)[1], 10);
+      return nA - nB;
     });
 
-  // FLAT LIST — no matching section headings found
+  // FLAT LIST — no section headings found
   if (!sectionHeadings.length) {
     const items = extractListItems(doc.body);
     return {
@@ -181,26 +108,20 @@ function scanSections(content, prefix) {
     };
   }
 
-  // SECTIONED — group <li> items between each heading and the next
+  // SECTIONED
   const sections = sectionHeadings.map((heading, idx) => {
-    const label     = heading.textContent.trim();
-    const id        = heading.getAttribute('id');
+    const label       = heading.textContent.trim();
+    const id          = heading.getAttribute('id');
     const nextHeading = sectionHeadings[idx + 1] || null;
-
-    const items = [];
+    const items       = [];
     let el = heading.nextElementSibling;
 
     while (el) {
-      // Stop when we reach the next section heading
       if (nextHeading && el === nextHeading) break;
-
-      // Stop if we hit any heading that starts with prefix and ends with number
       if (['H1','H2','H3','H4','H5','H6'].includes(el.tagName)) {
         const elId = el.getAttribute('id');
-        if (elId && elId.startsWith(prefix) && /\d+$/.test(elId)) break;
+        if (elId && /\d+$/.test(elId)) break;
       }
-
-      // Collect <li> from ol/ul children
       if (el.tagName === 'OL' || el.tagName === 'UL') {
         [...el.querySelectorAll('li')].forEach(li => {
           const parsed = parseListItem(li);
@@ -212,7 +133,6 @@ function scanSections(content, prefix) {
           if (parsed) items.push(parsed);
         });
       }
-
       el = el.nextElementSibling;
     }
 
@@ -222,26 +142,19 @@ function scanSections(content, prefix) {
   return { isFlatList: false, sections };
 }
 
-/* Extract all <li> items from the entire body (flat list case) */
 function extractListItems(body) {
   return [...body.querySelectorAll('li')]
     .map(parseListItem)
     .filter(Boolean);
 }
 
-/* Parse a single <li> — extract number and text
-   "30. Crittenden, Unreality, 69." → { num: '30', text: 'Crittenden...' } */
 function parseListItem(li) {
-  // Strip pagebreak spans (epub:type="pagebreak") before reading text
-  // Clone to avoid mutating the parsed DOM
   const clone = li.cloneNode(true);
   const pagebreaks = clone.querySelectorAll
     ? [...clone.querySelectorAll('[epub\\:type="pagebreak"],[role="doc-pagebreak"]')]
     : [];
   pagebreaks.forEach(el => el.parentNode.removeChild(el));
-
-  const raw = clone.textContent.trim();
-  // Match number at start, optionally followed by dot and/or space
+  const raw   = clone.textContent.trim();
   const match = raw.match(/^(\d+)[.\s]*/);
   if (!match) return null;
   const num  = match[1];
@@ -250,12 +163,10 @@ function parseListItem(li) {
 }
 
 /* ══════════════════════════════════════
-   STEP 2 — Section Dropdown
+   STEP 2 — Select Section
 ══════════════════════════════════════ */
-
 function populateSectionDropdown(result) {
   extSectionSelect.innerHTML = '<option value="">-- Select section --</option>';
-
   if (result.isFlatList) {
     extSectionStatus.textContent = 'Flat list detected — no sections found';
     const opt = document.createElement('option');
@@ -282,16 +193,57 @@ extSectionSelect.addEventListener('change', () => {
   extSectionCheck.style.opacity = '1';
   extStep2.classList.add('done');
 
-  // Show step 3
-  extStep3.hidden = false;
+  // Auto-detect prefix from selected section heading id
+  const sectionId   = extState.selectedSection.id;
+  const detected    = sectionId !== 'flat' ? detectIdPrefix(extState.extRawContent) : '';
+  extState.extPrefix    = detected;
+  extPrefixInput.value  = detected;
+  extPrefixStatus.textContent = detected
+    ? `Detected: "${detected}" — edit if wrong.`
+    : 'Could not auto-detect — enter prefix manually.';
+
+  // Show step 3 (prefix)
+  extPrefixStep.hidden = false;
 
   toast(`Section selected: ${extState.selectedSection.label}`, 'success');
 });
 
 /* ══════════════════════════════════════
-   STEP 3 — Upload Body Chapter File
+   STEP 3 — Verify Prefix
 ══════════════════════════════════════ */
+function detectIdPrefix(content) {
+  const parser   = new DOMParser();
+  const doc      = parser.parseFromString(content, 'application/xhtml+xml');
+  const headings = [...doc.querySelectorAll('h1,h2,h3,h4,h5,h6')];
+  const ids = headings
+    .map(h => h.getAttribute('id'))
+    .filter(Boolean)
+    .filter(id => /\d+$/.test(id));
+  if (!ids.length) return '';
+  const candidate = ids[0].replace(/\d+$/, '');
+  if (!candidate) return '';
+  const matches = ids.filter(id => id.startsWith(candidate) && /\d+$/.test(id));
+  if (matches.length < 2) return '';
+  return candidate;
+}
 
+btnConfirmPrefix.addEventListener('click', () => {
+  const prefix = extPrefixInput.value.trim();
+  if (!prefix) { toast('Please enter an ID prefix.', 'error'); return; }
+
+  extState.extPrefix = prefix;
+  extPrefixCheck.style.opacity = '1';
+  extPrefixStep.classList.add('done');
+
+  // Show step 4 (chapter file)
+  extStep3.hidden = false;
+
+  toast(`Prefix confirmed: "${prefix}"`, 'success');
+});
+
+/* ══════════════════════════════════════
+   STEP 4 — Upload Chapter File
+══════════════════════════════════════ */
 pickBodyFile.addEventListener('click', () => bodyFileInput.click());
 
 bodyFileInput.addEventListener('change', () => {
@@ -305,8 +257,6 @@ bodyFileInput.addEventListener('change', () => {
   const reader = new FileReader();
   reader.onload = (e) => {
     extState.bodyRawContent = e.target.result;
-
-    // Scan body sups
     const nums = scanBodySups(extState.bodyRawContent);
     extState.bodyNums = nums;
 
@@ -317,23 +267,26 @@ bodyFileInput.addEventListener('change', () => {
     pickBodyFile.classList.add('selected');
 
     renderChapterPreview(extState.bodyRawContent);
-
-    // Enable process if section also selected
     syncExtProcessButton();
 
-    toast(`Body file loaded: ${file.name} — ${nums.length} sups found`, 'success');
+    toast(`Chapter file loaded: ${file.name} — ${nums.length} sups found`, 'success');
   };
   reader.readAsText(file, 'utf-8');
 });
 
-/* Scan all bare <sup>NUMBER</sup> in body (no existing <a> inside) */
 function scanBodySups(content) {
   const nums = [];
-  const supRegex = /<sup>([\s\S]*?)<\/sup>/gi;
+  const re = /<sup>([\s\S]*?)<\/sup>/gi;
   let m;
-  while ((m = supRegex.exec(content)) !== null) {
+  while ((m = re.exec(content)) !== null) {
     const inner = m[1].trim();
-    if (/^\d+$/.test(inner)) nums.push(inner);
+    if (/^\d+$/.test(inner)) {
+      nums.push(inner);
+    } else {
+      // Already-linked: <a ...>NUMBER</a>
+      const aMatch = inner.match(/^<a[^>]*>(\d+)<\/a>$/i);
+      if (aMatch) nums.push(aMatch[1]);
+    }
   }
   return nums;
 }
@@ -349,43 +302,50 @@ function renderChapterPreview(content) {
   const body = doc.querySelector('body');
   if (preview && body) preview.innerHTML = body.innerHTML;
 
-  // Badge all bare <sup>NUMBER</sup> in preview (pre-process, no status yet)
+  // Badge bare and already-linked <sup>NUMBER</sup>
   preview.querySelectorAll('sup').forEach(sup => {
     const txt = sup.textContent.trim();
     if (!/^\d+$/.test(txt)) return;
-    if (sup.querySelector('a')) return; // already linked
     sup.classList.add('sup-badge', 'status-pending');
     sup.setAttribute('data-sup', txt);
   });
 }
 
-function checkExistingIds(section) {
-  const prefix = extState.extPrefix;
-  const items  = section.items;
-  if (!items || !items.length) return 0;
-  let count = 0;
-  items.forEach(item => {
-    const padded = item.num.padStart(3, '0');
-    // After processing, <li> gets id="prefix-033" — check for that pattern
-    const checkRegex = new RegExp(`<li[^>]*\\sid="${prefix}-${padded}"`, 'i');
-    if (checkRegex.test(extState.extRawContent)) count++;
-  });
-  return count;
-}
-
 function syncExtProcessButton() {
-  const ready = extState.bodyRawContent && extState.selectedSection;
-  btnProcessExt.disabled = !ready;
+  btnProcessExt.disabled = !(extState.bodyRawContent && extState.selectedSection && extState.extPrefix);
 }
 
 /* ══════════════════════════════════════
    PROCESS
 ══════════════════════════════════════ */
+function checkExistingIds(section) {
+  const items = section.items;
+  if (!items || !items.length) return 0;
+
+  // Get section content
+  let secContent;
+  if (section.id === 'flat') {
+    secContent = extState.extRawContent;
+  } else {
+    const secAnchor = `id="${section.id}"`;
+    const secStart  = extState.extRawContent.indexOf(secAnchor);
+    if (secStart === -1) return 0;
+    const openTagEnd = extState.extRawContent.indexOf('>', secStart) + 1;
+    const afterSec   = extState.extRawContent.indexOf('<section', openTagEnd);
+    const secEnd     = afterSec !== -1 ? afterSec : extState.extRawContent.length;
+    secContent = extState.extRawContent.substring(openTagEnd, secEnd);
+  }
+
+  // Detect already-linked lis: <li> contains an <a href="...#..."> backlink
+  const linkedLiRegex = /<li[^>]*>[\s\S]*?<a\s[^>]*href="[^"]*#[^"]*"[^>]*>/gi;
+  const matches = secContent.match(linkedLiRegex);
+  return matches ? matches.length : 0;
+}
 
 btnProcessExt.addEventListener('click', () => {
-  if (!extState.bodyRawContent)  { toast('No body file loaded.', 'error'); return; }
+  if (!extState.bodyRawContent)  { toast('No chapter file loaded.', 'error'); return; }
   if (!extState.selectedSection) { toast('No section selected.', 'error'); return; }
-  if (!extState.extRawContent)   { toast('No external file loaded.', 'error'); return; }
+  if (!extState.extRawContent)   { toast('No footnote file loaded.', 'error'); return; }
 
   const existingCount = checkExistingIds(extState.selectedSection);
   if (existingCount > 0) {
@@ -396,31 +356,41 @@ btnProcessExt.addEventListener('click', () => {
     return;
   }
 
-  try {
-    processExternalLinks();
-  } catch(err) {
-    toast('Error: ' + err.message, 'error');
-    console.error(err);
-  }
+  try { processExternalLinks(); }
+  catch(err) { toast('Error: ' + err.message, 'error'); console.error(err); }
 });
 
-// Warning modal — Replace
 document.getElementById('extIdWarnReplace').addEventListener('click', () => {
   document.getElementById('extIdWarnModal').hidden = true;
-  // Strip existing ids from <li> in ext file before re-processing
-  extState.extRawContent = extState.extRawContent.replace(
-    /(<li)\s+id="[^"]*"([^>]*>)/gi,
-    '$1$2'
-  );
-  try {
-    processExternalLinks();
-  } catch(err) {
-    toast('Error: ' + err.message, 'error');
-    console.error(err);
+
+  // Strip ids only within the selected section bounds
+  const sectionId = extState.selectedSection.id;
+  if (sectionId === 'flat') {
+    // Flat list — strip across entire file
+    let raw = extState.extRawContent;
+    raw = raw.replace(/(<li)\s+id="[^"]*"([^>]*>)/gi, '$1$2');
+    raw = raw.replace(/(<li[^>]*>)\s*<a[^>]*>(\d+\.?)\s*<\/a>\s*/gi, '$1$2 ');
+    extState.extRawContent = raw;
+  } else {
+    const secAnchor  = `id="${sectionId}"`;
+    const secStart   = extState.extRawContent.indexOf(secAnchor);
+    if (secStart !== -1) {
+      const openTagEnd = extState.extRawContent.indexOf('>', secStart) + 1;
+      const afterSec   = extState.extRawContent.indexOf('<section', openTagEnd);
+      const secEnd     = afterSec !== -1 ? afterSec : extState.extRawContent.length;
+      const before     = extState.extRawContent.substring(0, openTagEnd);
+      let   secContent = extState.extRawContent.substring(openTagEnd, secEnd);
+      const after      = extState.extRawContent.substring(secEnd);
+      secContent = secContent.replace(/(<li)\s+id="[^"]*"([^>]*>)/gi, '$1$2');
+      secContent = secContent.replace(/(<li[^>]*>)\s*<a[^>]*>(\d+\.?)\s*<\/a>\s*/gi, '$1$2 ');
+      extState.extRawContent = before + secContent + after;
+    }
   }
+
+  try { processExternalLinks(); }
+  catch(err) { toast('Error: ' + err.message, 'error'); console.error(err); }
 });
 
-// Warning modal — Cancel
 document.getElementById('extIdWarnCancel').addEventListener('click', () => {
   document.getElementById('extIdWarnModal').hidden = true;
 });
@@ -439,50 +409,110 @@ function processExternalLinks() {
 
   let newBody = extState.bodyRawContent;
   let newExt  = extState.extRawContent;
-
   const changes = [];
 
-  // STEP A: Replace body sups
+  // STEP A: Replace body sups — handles bare <sup>1</sup> and already-linked <sup><a>1</a></sup>
   newBody = newBody.replace(/<sup>([\s\S]*?)<\/sup>/gi, (full, inner) => {
     const trimmed = inner.trim();
-    if (!/^\d+$/.test(trimmed)) return full;
-    const num = trimmed;
-    if (!fnMap[num]) return full;
-    const padded  = num.padStart(3, '0');
-    const fnId    = `${prefix}-${padded}`;
-    const bodyId  = `${fnId}-fn`;
-    changes.push({ num, bodyId, fnId });
-    return `<sup><a class="xref" href="${extFile}#${fnId}" id="${bodyId}">${num}</a></sup>`;
+    // Bare number
+    if (/^\d+$/.test(trimmed)) {
+      const num = trimmed;
+      if (!fnMap[num]) return full;
+      const padded = num.padStart(3, '0');
+      const fnId   = `${prefix}-${padded}`;
+      const bodyId = `${fnId}-fn`;
+      changes.push({ num, bodyId, fnId });
+      return `<sup><a class="xref" href="${extFile}#${fnId}" id="${bodyId}">${num}</a></sup>`;
+    }
+    // Already-linked: <a ...>NUMBER</a>
+    const aMatch = trimmed.match(/^<a[^>]*>(\d+)<\/a>$/i);
+    if (aMatch) {
+      const num = aMatch[1];
+      if (!fnMap[num]) return full;
+      const padded = num.padStart(3, '0');
+      const fnId   = `${prefix}-${padded}`;
+      const bodyId = `${fnId}-fn`;
+      changes.push({ num, bodyId, fnId });
+      return `<sup><a class="xref" href="${extFile}#${fnId}" id="${bodyId}">${num}</a></sup>`;
+    }
+    return full;
   });
 
-  // STEP B: Inject id into matching <li> in external file
+  // STEP B: Inject id into matching <li> — scoped to selected section only
+  // Find section bounds in raw file to avoid matching lis in other sections
+  const sectionId  = extState.selectedSection.id;
+  const secAnchor  = `id="${sectionId}"`;
+  const secStart   = newExt.indexOf(secAnchor);
+
+  if (secStart === -1) {
+    toast('Could not locate section in footnote file.', 'error');
+    return;
+  }
+
+  // Find where next section starts (next <section or next heading with id= after secStart)
+  const afterSec   = newExt.indexOf('<section', secStart + secAnchor.length);
+  const secEnd     = afterSec !== -1 ? afterSec : newExt.length;
+
+  // Split file into: before section, section content, after section
+  let beforeSec  = newExt.substring(0, secStart);
+  let secContent = newExt.substring(secStart, secEnd);
+  let afterSecStr= newExt.substring(secEnd);
+
+  // Run replacements only within secContent
   changes.forEach(({ num, bodyId, fnId }) => {
     const padded = num.padStart(3, '0');
     const id     = `${prefix}-${padded}`;
-    // Match <li> that contains the footnote number, even if a pagebreak <span> comes first
-    // e.g. <li class="fn" ...><span id="page_261" role="doc-pagebreak" .../>34 Eagleton...
-    // Negative lookahead (?![^>]*\sid=) skips <li> already injected with an id
-    // This prevents a previously processed li from being matched again by the next num
+    // First try: match li WITHOUT existing id
     const liRegex = new RegExp(
       `(<li)(?![^>]*\\sid=)([^>]*>)` +
       `((?:<span[^/]*/\\s*>|<span[^>]*></span>)*)` +
       `(\\s*${num}[.\\s])`,
       'i'
     );
-    newExt = newExt.replace(liRegex, (full, tag, attrs, spans, numText) => {
-      const cleanNum = numText.trim().replace(/[.\s]+$/, '');
-      return `${tag} id="${id}"${attrs}${spans}<a href="${bodyFile}#${bodyId}">${cleanNum}.</a> `;
-    });
+    // Second try: match li WITH existing id (replace it)
+    const liRegexExisting = new RegExp(
+      `(<li)([^>]*\\sid="[^"]*")([^>]*>)` +
+      `((?:<span[^/]*/\\s*>|<span[^>]*></span>)*)` +
+      `(<a[^>]*>\\s*${num}[^<]*<\\/a>\\s*)`,
+      'i'
+    );
+
+    // Third try: li has no id but already has backlink anchor (already-linked structure)
+    const liRegexLinked = new RegExp(
+      `(<li)(?![^>]*\\sid=)([^>]*>)` +
+      `(<a[^>]*>\\s*${num}[^<]*<\\/a>\\s*)`,
+      'i'
+    );
+
+    if (liRegex.test(secContent)) {
+      secContent = secContent.replace(liRegex, (full, tag, attrs, spans, numText) => {
+        const origNum = numText.trim();
+        return `${tag} id="${id}"${attrs}${spans}<a href="${bodyFile}#${bodyId}">${origNum}</a> `;
+      });
+    } else if (liRegexExisting.test(secContent)) {
+      // li already has id — replace id and update backlink href
+      secContent = secContent.replace(liRegexExisting, (full, tag, existingId, attrs, spans, oldAnchor) => {
+        return `${tag} id="${id}"${attrs}${spans}<a href="${bodyFile}#${bodyId}">${num}</a> `;
+      });
+    } else if (liRegexLinked.test(secContent)) {
+      // li has no id but already has anchor — inject id and update href
+      secContent = secContent.replace(liRegexLinked, (full, tag, attrs, oldAnchor) => {
+        return `${tag} id="${id}"${attrs}<a href="${bodyFile}#${bodyId}">${num}</a> `;
+      });
+    }
   });
 
-  // Store processed content for copy buttons
-  extState.processedBody = newBody;
-  extState.processedExt  = newExt;
+  // Stitch back
+  newExt = beforeSec + secContent + afterSecStr;
+
+  extState.processedBody   = newBody;
+  extState.processedExt    = newExt;
+  extState.bodyRawContent  = newBody;
+  extState.extRawContent   = newExt;
 
   // Show copy buttons
   const copyBtns = document.getElementById('extCopyBtns');
   if (copyBtns) copyBtns.hidden = false;
-  if (window.lucide) lucide.createIcons();
 
   // Populate right sidebar
   const sidebarBody  = document.getElementById('extSidebarBody');
@@ -492,15 +522,16 @@ function processExternalLinks() {
   if (sidebarCount) sidebarCount.textContent = extState.bodyNums.length;
 
   if (sidebarBody) {
+    sidebarBody.innerHTML = '';
     const linkedNums = new Set(changes.map(c => c.num));
     const preview    = document.getElementById('extDocPreview');
 
-    // Update sup badges in preview to green/red based on link status
+    // Update sup badges in preview
     if (preview) {
       preview.querySelectorAll('sup[data-sup]').forEach(sup => {
-        const num = sup.getAttribute('data-sup');
+        const n = sup.getAttribute('data-sup');
         sup.classList.remove('status-pending');
-        sup.classList.add(linkedNums.has(num) ? 'status-green' : 'status-red');
+        sup.classList.add(linkedNums.has(n) ? 'status-green' : 'status-red');
       });
     }
 
@@ -519,7 +550,7 @@ function processExternalLinks() {
         <span class="link-status ${ok ? 'status-ok' : 'status-fail'}">${ok ? 'OK' : 'Fail'}</span>
       `;
 
-      // RIGHT → MIDDLE: click sidebar item → scroll to sup in preview
+      // RIGHT → MIDDLE
       item.addEventListener('click', () => {
         if (!preview) return;
         const target = preview.querySelector(`sup[data-sup="${num}"]`);
@@ -528,7 +559,6 @@ function processExternalLinks() {
           target.classList.add('ext-highlight');
           setTimeout(() => target.classList.remove('ext-highlight'), 1500);
         }
-        // highlight active sidebar item
         sidebarBody.querySelectorAll('.link-item').forEach(el => el.classList.remove('ext-active'));
         item.classList.add('ext-active');
       });
@@ -536,13 +566,13 @@ function processExternalLinks() {
       sidebarBody.appendChild(item);
     });
 
-    // MIDDLE → RIGHT: click sup badge → scroll to sidebar item
+    // MIDDLE → RIGHT
     if (preview) {
       preview.querySelectorAll('sup[data-sup]').forEach(sup => {
         sup.style.cursor = 'pointer';
         sup.addEventListener('click', () => {
-          const num      = sup.getAttribute('data-sup');
-          const sideItem = sidebarBody.querySelector(`[data-sidebar-num="${num}"]`);
+          const n        = sup.getAttribute('data-sup');
+          const sideItem = sidebarBody.querySelector(`[data-sidebar-num="${n}"]`);
           if (sideItem) {
             sideItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
             sidebarBody.querySelectorAll('.link-item').forEach(el => el.classList.remove('ext-active'));
@@ -579,13 +609,13 @@ function downloadFile(content, filename) {
 document.getElementById('btnCopyChapter').addEventListener('click', () => {
   if (!extState.processedBody) { toast('No processed content yet.', 'error'); return; }
   navigator.clipboard.writeText(extState.processedBody)
-    .then(() => toast('Chapter XHTML copied to clipboard!', 'success'))
+    .then(() => toast('Chapter XHTML copied!', 'success'))
     .catch(() => toast('Copy failed.', 'error'));
 });
 
 document.getElementById('btnCopyFootnote').addEventListener('click', () => {
   if (!extState.processedExt) { toast('No processed content yet.', 'error'); return; }
   navigator.clipboard.writeText(extState.processedExt)
-    .then(() => toast('Footnote XHTML copied to clipboard!', 'success'))
+    .then(() => toast('Footnote XHTML copied!', 'success'))
     .catch(() => toast('Copy failed.', 'error'));
 });

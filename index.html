@@ -73,15 +73,15 @@
       </div>
     </div>
 
-    <!-- TAB 2 SIDEBAR — Pagebreak Fixer -->
+    <!-- TAB 2 SIDEBAR — Footnote Linker External -->
     <div class="sidebar-steps" data-for-tab="2" hidden>
       <div class="steps">
 
-        <!-- STEP 1: Upload External Footnote File -->
+        <!-- STEP 1: Upload Footnote File -->
         <div class="step" id="extStep1">
           <div class="step-head">
             <span class="step-num">1</span>
-            <span class="step-title">External Footnote File</span>
+            <span class="step-title">Footnote File</span>
             <span class="step-check" id="extFileCheck"><i data-lucide="check"></i></span>
           </div>
           <button class="step-btn" id="pickExtFile">
@@ -93,30 +93,11 @@
           <div class="step-status" id="extFileStatus">External notes/appendix XHTML file</div>
         </div>
 
-        <!-- STEP 1b: ID Prefix verify (shown after file upload) -->
-        <div class="step" id="extPrefixStep" hidden>
-          <div class="step-head">
-            <span class="step-num" style="font-size:0.7rem">1b</span>
-            <span class="step-title">Verify ID Prefix</span>
-            <span class="step-check" id="extPrefixCheck"><i data-lucide="check"></i></span>
-          </div>
-          <div class="field" id="extPrefixField">
-            <i data-lucide="hash" class="field-icon"></i>
-            <input type="text" id="extPrefixInput" placeholder="e.g. app1" autocomplete="off" spellcheck="false"/>
-          </div>
-          <div class="step-status" id="extPrefixStatus">Auto-detected from file. Edit if needed.</div>
-          <button class="step-btn" id="btnConfirmPrefix" style="margin-top:8px">
-            <i data-lucide="check-circle" class="lg"></i>
-            <span class="step-btn-text">Confirm Prefix</span>
-            <i data-lucide="chevron-right" class="step-btn-arrow"></i>
-          </button>
-        </div>
-
-        <!-- STEP 2: Select Chapter Section -->
+        <!-- STEP 2: Select Section -->
         <div class="step" id="extStep2" hidden>
           <div class="step-head">
             <span class="step-num">2</span>
-            <span class="step-title">Select Chapter Section</span>
+            <span class="step-title">Select Section</span>
             <span class="step-check" id="extSectionCheck"><i data-lucide="check"></i></span>
           </div>
           <div class="field" id="extSectionField">
@@ -128,11 +109,30 @@
           <div class="step-status" id="extSectionStatus">Sections detected from file</div>
         </div>
 
-        <!-- STEP 3: Upload Chapter Body File -->
-        <div class="step" id="extStep3" hidden>
+        <!-- STEP 3: Verify ID Prefix -->
+        <div class="step" id="extPrefixStep" hidden>
           <div class="step-head">
             <span class="step-num">3</span>
-            <span class="step-title">Chapter Body File</span>
+            <span class="step-title">Verify ID Prefix</span>
+            <span class="step-check" id="extPrefixCheck"><i data-lucide="check"></i></span>
+          </div>
+          <div class="field" id="extPrefixField">
+            <i data-lucide="hash" class="field-icon"></i>
+            <input type="text" id="extPrefixInput" placeholder="e.g. bm1" autocomplete="off" spellcheck="false"/>
+          </div>
+          <div class="step-status" id="extPrefixStatus">Auto-detected from file. Edit if needed.</div>
+          <button class="step-btn" id="btnConfirmPrefix" style="margin-top:8px">
+            <i data-lucide="check-circle" class="lg"></i>
+            <span class="step-btn-text">Confirm Prefix</span>
+            <i data-lucide="chevron-right" class="step-btn-arrow"></i>
+          </button>
+        </div>
+
+        <!-- STEP 4: Upload Chapter File -->
+        <div class="step" id="extStep3" hidden>
+          <div class="step-head">
+            <span class="step-num">4</span>
+            <span class="step-title">Chapter File</span>
             <span class="step-check" id="extBodyCheck"><i data-lucide="check"></i></span>
           </div>
           <button class="step-btn" id="pickBodyFile">
@@ -642,29 +642,29 @@
       </div>
     </div>
 
-  <!-- TAB 2 — Existing ID Warning Modal -->
-  <div class="modal-overlay" id="extIdWarnModal" hidden>
-    <div class="popup popup-modal" style="max-width:380px;">
-      <div class="popup-head">
-        <span class="popup-sel"><i data-lucide="alert-triangle"></i> Existing IDs Detected</span>
-        <button class="popup-close" id="extIdWarnClose" aria-label="Close"><i data-lucide="x"></i></button>
-      </div>
-      <div style="padding:16px;font-size:0.85rem;color:var(--text);line-height:1.6;">
-        <p id="extIdWarnMsg">Some footnotes in this section already have IDs.</p>
-        <p style="margin-top:8px;color:var(--muted);font-size:0.8rem;">Running again will <strong>replace</strong> the existing IDs with new ones.</p>
-      </div>
-      <div style="display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--border);">
-        <button class="btn-run" id="extIdWarnReplace" style="flex:1;">
-          <i data-lucide="refresh-cw"></i><span>Replace</span>
-        </button>
-        <button class="btn-ghost" id="extIdWarnCancel" style="flex:1;justify-content:center;">
-          <i data-lucide="x"></i><span>Cancel</span>
-        </button>
-      </div>
+  </main>
+</div>
+
+<!-- TAB 2 — Existing ID Warning Modal -->
+<div class="modal-overlay" id="extIdWarnModal" hidden>
+  <div class="popup popup-modal" style="max-width:380px;">
+    <div class="popup-head">
+      <span class="popup-sel"><i data-lucide="alert-triangle"></i> Existing IDs Detected</span>
+      <button class="popup-close" id="extIdWarnClose" aria-label="Close"><i data-lucide="x"></i></button>
+    </div>
+    <div style="padding:16px;font-size:0.85rem;color:var(--text);line-height:1.6;">
+      <p id="extIdWarnMsg">Some footnotes in this section already have IDs.</p>
+      <p style="margin-top:8px;color:var(--muted);font-size:0.8rem;">Running again will <strong>replace</strong> the existing IDs with new ones.</p>
+    </div>
+    <div style="display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--border);">
+      <button class="btn-run" id="extIdWarnReplace" style="flex:1;">
+        <i data-lucide="refresh-cw"></i><span>Replace</span>
+      </button>
+      <button class="btn-ghost" id="extIdWarnCancel" style="flex:1;justify-content:center;">
+        <i data-lucide="x"></i><span>Cancel</span>
+      </button>
     </div>
   </div>
-
-  </main>
 </div>
 
 <!-- ============ CONTENT LINKER: RESOLVE POPUP ============ -->
