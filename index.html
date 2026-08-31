@@ -256,6 +256,14 @@
 
     <!-- TAB 2 FOOT -->
     <div class="sidebar-foot" data-foot-tab="2" hidden>
+      <div id="extCopyBtns" hidden style="display:flex;gap:8px;margin-bottom:8px;">
+        <button class="btn-ghost" id="btnCopyChapter" style="flex:1;justify-content:center;">
+          <i data-lucide="copy"></i><span>Copy Chapter</span>
+        </button>
+        <button class="btn-ghost" id="btnCopyFootnote" style="flex:1;justify-content:center;">
+          <i data-lucide="copy"></i><span>Copy Footnote</span>
+        </button>
+      </div>
       <button class="btn-run" id="btnProcessExt" disabled>
         <i data-lucide="play"></i><span>Process File</span>
       </button>
@@ -426,15 +434,50 @@
 
     <!-- ============ TAB 2 PANE ============ -->
     <div class="tab-pane" id="tabPane2" hidden>
-      <div class="main-body">
+
+      <!-- empty state -->
+      <div class="main-body" id="extEmptyState">
         <div class="empty-state">
           <span class="empty-icon"><i data-lucide="external-link"></i></span>
-          <h2>Footnote Link External</h2>
-          <span class="empty-tag">In development</span>
-          <p>Will link footnotes across external files — connecting body superscripts
-             in one chapter to footnote anchors defined in a separate XHTML file.</p>
+          <h2>Nothing loaded yet</h2>
+          <p>Upload the footnote file and chapter file in the sidebar, then run Process.</p>
+          <span class="empty-hint"><i data-lucide="arrow-left"></i> Start with step 1 in the sidebar</span>
         </div>
       </div>
+
+      <!-- workspace (shown after chapter file loaded) -->
+      <div class="workspace" id="extWorkspace" hidden>
+        <div style="display:flex;flex:1;overflow:hidden;">
+
+          <!-- middle: chapter preview -->
+          <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
+            <div class="inner-tab-bar">
+              <button class="inner-tab-btn active" data-ext-tab="preview">
+                <i data-lucide="file-text"></i><span>Preview</span>
+              </button>
+            </div>
+            <div class="doc-panel">
+              <div class="doc-preview preview-doc" id="extDocPreview"></div>
+            </div>
+          </div>
+
+          <!-- right: link status sidebar -->
+          <div class="rle-sidebar" id="extLinkSidebar" style="width:260px;">
+            <div class="rle-sidebar-head">
+              <span class="rle-sidebar-title">Link Status</span>
+              <span class="rle-sidebar-count" id="extSidebarCount">0</span>
+            </div>
+            <div class="rle-sidebar-body" id="extSidebarBody">
+              <div class="rle-sidebar-empty" id="extSidebarEmpty">
+                <i data-lucide="link-2"></i>
+                <p>Process files to see link status</p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
     </div>
 
     <!-- ============ TAB 3 PANE ============ -->
@@ -598,6 +641,28 @@
 
       </div>
     </div>
+
+  <!-- TAB 2 — Existing ID Warning Modal -->
+  <div class="modal-overlay" id="extIdWarnModal" hidden>
+    <div class="popup popup-modal" style="max-width:380px;">
+      <div class="popup-head">
+        <span class="popup-sel"><i data-lucide="alert-triangle"></i> Existing IDs Detected</span>
+        <button class="popup-close" id="extIdWarnClose" aria-label="Close"><i data-lucide="x"></i></button>
+      </div>
+      <div style="padding:16px;font-size:0.85rem;color:var(--text);line-height:1.6;">
+        <p id="extIdWarnMsg">Some footnotes in this section already have IDs.</p>
+        <p style="margin-top:8px;color:var(--muted);font-size:0.8rem;">Running again will <strong>replace</strong> the existing IDs with new ones.</p>
+      </div>
+      <div style="display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--border);">
+        <button class="btn-run" id="extIdWarnReplace" style="flex:1;">
+          <i data-lucide="refresh-cw"></i><span>Replace</span>
+        </button>
+        <button class="btn-ghost" id="extIdWarnCancel" style="flex:1;justify-content:center;">
+          <i data-lucide="x"></i><span>Cancel</span>
+        </button>
+      </div>
+    </div>
+  </div>
 
   </main>
 </div>

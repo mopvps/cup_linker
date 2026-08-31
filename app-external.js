@@ -11,6 +11,8 @@ let extState = {
   bodyRawContent: '',
   bodyNums: [],           // sup numbers found in body file
   isFlatList: false,      // true if no sections detected
+  processedBody: '',
+  processedExt: '',
 };
 
 /* ── DOM REFS ── */
@@ -230,11 +232,20 @@ function extractListItems(body) {
 /* Parse a single <li> — extract number and text
    "30. Crittenden, Unreality, 69." → { num: '30', text: 'Crittenden...' } */
 function parseListItem(li) {
-  const raw  = li.textContent.trim();
-  const match = raw.match(/^(\d+)[.\s]/);
+  // Strip pagebreak spans (epub:type="pagebreak") before reading text
+  // Clone to avoid mutating the parsed DOM
+  const clone = li.cloneNode(true);
+  const pagebreaks = clone.querySelectorAll
+    ? [...clone.querySelectorAll('[epub\\:type="pagebreak"],[role="doc-pagebreak"]')]
+    : [];
+  pagebreaks.forEach(el => el.parentNode.removeChild(el));
+
+  const raw = clone.textContent.trim();
+  // Match number at start, optionally followed by dot and/or space
+  const match = raw.match(/^(\d+)[.\s]*/);
   if (!match) return null;
   const num  = match[1];
-  const text = raw.replace(/^\d+[.\s]+/, '').trim();
+  const text = raw.replace(/^\d+[.\s]*/, '').trim();
   return { num, text, el: li };
 }
 
@@ -305,6 +316,8 @@ bodyFileInput.addEventListener('change', () => {
     extStep3.classList.add('done');
     pickBodyFile.classList.add('selected');
 
+    renderChapterPreview(extState.bodyRawContent);
+
     // Enable process if section also selected
     syncExtProcessButton();
 
@@ -325,6 +338,41 @@ function scanBodySups(content) {
   return nums;
 }
 
+function renderChapterPreview(content) {
+  const empty     = document.getElementById('extEmptyState');
+  const workspace = document.getElementById('extWorkspace');
+  const preview   = document.getElementById('extDocPreview');
+  if (empty) empty.hidden = true;
+  if (workspace) workspace.hidden = false;
+  const parser = new DOMParser();
+  const doc  = parser.parseFromString(content, 'application/xhtml+xml');
+  const body = doc.querySelector('body');
+  if (preview && body) preview.innerHTML = body.innerHTML;
+
+  // Badge all bare <sup>NUMBER</sup> in preview (pre-process, no status yet)
+  preview.querySelectorAll('sup').forEach(sup => {
+    const txt = sup.textContent.trim();
+    if (!/^\d+$/.test(txt)) return;
+    if (sup.querySelector('a')) return; // already linked
+    sup.classList.add('sup-badge', 'status-pending');
+    sup.setAttribute('data-sup', txt);
+  });
+}
+
+function checkExistingIds(section) {
+  const prefix = extState.extPrefix;
+  const items  = section.items;
+  if (!items || !items.length) return 0;
+  let count = 0;
+  items.forEach(item => {
+    const padded = item.num.padStart(3, '0');
+    // After processing, <li> gets id="prefix-033" — check for that pattern
+    const checkRegex = new RegExp(`<li[^>]*\\sid="${prefix}-${padded}"`, 'i');
+    if (checkRegex.test(extState.extRawContent)) count++;
+  });
+  return count;
+}
+
 function syncExtProcessButton() {
   const ready = extState.bodyRawContent && extState.selectedSection;
   btnProcessExt.disabled = !ready;
@@ -335,9 +383,18 @@ function syncExtProcessButton() {
 ══════════════════════════════════════ */
 
 btnProcessExt.addEventListener('click', () => {
-  if (!extState.bodyRawContent)    { toast('No body file loaded.', 'error'); return; }
-  if (!extState.selectedSection)   { toast('No section selected.', 'error'); return; }
-  if (!extState.extRawContent)     { toast('No external file loaded.', 'error'); return; }
+  if (!extState.bodyRawContent)  { toast('No body file loaded.', 'error'); return; }
+  if (!extState.selectedSection) { toast('No section selected.', 'error'); return; }
+  if (!extState.extRawContent)   { toast('No external file loaded.', 'error'); return; }
+
+  const existingCount = checkExistingIds(extState.selectedSection);
+  if (existingCount > 0) {
+    const msg = document.getElementById('extIdWarnMsg');
+    if (msg) msg.textContent = `${existingCount} footnote(s) in this section already have IDs.`;
+    document.getElementById('extIdWarnModal').hidden = false;
+    if (window.lucide) lucide.createIcons();
+    return;
+  }
 
   try {
     processExternalLinks();
@@ -347,13 +404,36 @@ btnProcessExt.addEventListener('click', () => {
   }
 });
 
-function processExternalLinks() {
-  const prefix      = extState.extPrefix;
-  const section     = extState.selectedSection;
-  const bodyFile    = extState.bodyFileName;
-  const extFile     = extState.extFileName;
+// Warning modal — Replace
+document.getElementById('extIdWarnReplace').addEventListener('click', () => {
+  document.getElementById('extIdWarnModal').hidden = true;
+  // Strip existing ids from <li> in ext file before re-processing
+  extState.extRawContent = extState.extRawContent.replace(
+    /(<li)\s+id="[^"]*"([^>]*>)/gi,
+    '$1$2'
+  );
+  try {
+    processExternalLinks();
+  } catch(err) {
+    toast('Error: ' + err.message, 'error');
+    console.error(err);
+  }
+});
 
-  // Build a map: num -> footnote item
+// Warning modal — Cancel
+document.getElementById('extIdWarnCancel').addEventListener('click', () => {
+  document.getElementById('extIdWarnModal').hidden = true;
+});
+document.getElementById('extIdWarnClose').addEventListener('click', () => {
+  document.getElementById('extIdWarnModal').hidden = true;
+});
+
+function processExternalLinks() {
+  const prefix   = extState.extPrefix;
+  const section  = extState.selectedSection;
+  const bodyFile = extState.bodyFileName;
+  const extFile  = extState.extFileName;
+
   const fnMap = {};
   section.items.forEach(item => { fnMap[item.num] = item; });
 
@@ -362,53 +442,125 @@ function processExternalLinks() {
 
   const changes = [];
 
-  // ── STEP A: Replace body sups
-  // <sup>30</sup> →
-  // <sup><a class="xref" href="extFile#prefix-030" id="prefix-030-fn">30</a></sup>
+  // STEP A: Replace body sups
   newBody = newBody.replace(/<sup>([\s\S]*?)<\/sup>/gi, (full, inner) => {
     const trimmed = inner.trim();
-    if (!/^\d+$/.test(trimmed)) return full; // skip already linked
-    const num    = trimmed;
-    if (!fnMap[num]) return full; // no matching footnote
-
+    if (!/^\d+$/.test(trimmed)) return full;
+    const num = trimmed;
+    if (!fnMap[num]) return full;
     const padded  = num.padStart(3, '0');
     const fnId    = `${prefix}-${padded}`;
     const bodyId  = `${fnId}-fn`;
-    const replacement = `<sup><a class="xref" href="${extFile}#${fnId}" id="${bodyId}">${num}</a></sup>`;
     changes.push({ num, bodyId, fnId });
-    return replacement;
+    return `<sup><a class="xref" href="${extFile}#${fnId}" id="${bodyId}">${num}</a></sup>`;
   });
 
-  // ── STEP B: Inject id into matching <li> in external file
-  // and wrap number with backlink anchor
+  // STEP B: Inject id into matching <li> in external file
   changes.forEach(({ num, bodyId, fnId }) => {
     const padded = num.padStart(3, '0');
     const id     = `${prefix}-${padded}`;
-
-    // Match <li> whose text starts with "num." or "num "
-    // e.g. <li>30. Crittenden...</li>
+    // Match <li> that contains the footnote number, even if a pagebreak <span> comes first
+    // e.g. <li class="fn" ...><span id="page_261" role="doc-pagebreak" .../>34 Eagleton...
+    // Negative lookahead (?![^>]*\sid=) skips <li> already injected with an id
+    // This prevents a previously processed li from being matched again by the next num
     const liRegex = new RegExp(
-      `(<li)([^>]*>)(\\s*${num}[.\\s])`,
+      `(<li)(?![^>]*\\sid=)([^>]*>)` +
+      `((?:<span[^/]*/\\s*>|<span[^>]*></span>)*)` +
+      `(\\s*${num}[.\\s])`,
       'i'
     );
-    newExt = newExt.replace(liRegex, (full, tag, attrs, numText) => {
-      // Add id to <li>, wrap number with backlink
+    newExt = newExt.replace(liRegex, (full, tag, attrs, spans, numText) => {
       const cleanNum = numText.trim().replace(/[.\s]+$/, '');
-      return `${tag} id="${id}"${attrs}<a href="${bodyFile}#${bodyId}">${cleanNum}.</a> `;
+      return `${tag} id="${id}"${attrs}${spans}<a href="${bodyFile}#${bodyId}">${cleanNum}.</a> `;
     });
   });
 
-  // ── STEP C: Download both files
+  // Store processed content for copy buttons
+  extState.processedBody = newBody;
+  extState.processedExt  = newExt;
+
+  // Show copy buttons
+  const copyBtns = document.getElementById('extCopyBtns');
+  if (copyBtns) copyBtns.hidden = false;
+  if (window.lucide) lucide.createIcons();
+
+  // Populate right sidebar
+  const sidebarBody  = document.getElementById('extSidebarBody');
+  const sidebarCount = document.getElementById('extSidebarCount');
+  const sidebarEmpty = document.getElementById('extSidebarEmpty');
+  if (sidebarEmpty) sidebarEmpty.hidden = true;
+  if (sidebarCount) sidebarCount.textContent = extState.bodyNums.length;
+
+  if (sidebarBody) {
+    const linkedNums = new Set(changes.map(c => c.num));
+    const preview    = document.getElementById('extDocPreview');
+
+    // Update sup badges in preview to green/red based on link status
+    if (preview) {
+      preview.querySelectorAll('sup[data-sup]').forEach(sup => {
+        const num = sup.getAttribute('data-sup');
+        sup.classList.remove('status-pending');
+        sup.classList.add(linkedNums.has(num) ? 'status-green' : 'status-red');
+      });
+    }
+
+    // Build sidebar items
+    extState.bodyNums.forEach(num => {
+      const ok   = linkedNums.has(num);
+      const item = document.createElement('div');
+      item.className = `link-item ${ok ? 'matched' : 'unmatched'}`;
+      item.setAttribute('data-sidebar-num', num);
+      item.innerHTML = `
+        <div class="link-num">${num}</div>
+        <div class="link-info">
+          <div class="link-id">Sup ${num}</div>
+          <div class="link-href">${ok ? 'Linked ✓' : 'No match'}</div>
+        </div>
+        <span class="link-status ${ok ? 'status-ok' : 'status-fail'}">${ok ? 'OK' : 'Fail'}</span>
+      `;
+
+      // RIGHT → MIDDLE: click sidebar item → scroll to sup in preview
+      item.addEventListener('click', () => {
+        if (!preview) return;
+        const target = preview.querySelector(`sup[data-sup="${num}"]`);
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          target.classList.add('ext-highlight');
+          setTimeout(() => target.classList.remove('ext-highlight'), 1500);
+        }
+        // highlight active sidebar item
+        sidebarBody.querySelectorAll('.link-item').forEach(el => el.classList.remove('ext-active'));
+        item.classList.add('ext-active');
+      });
+
+      sidebarBody.appendChild(item);
+    });
+
+    // MIDDLE → RIGHT: click sup badge → scroll to sidebar item
+    if (preview) {
+      preview.querySelectorAll('sup[data-sup]').forEach(sup => {
+        sup.style.cursor = 'pointer';
+        sup.addEventListener('click', () => {
+          const num      = sup.getAttribute('data-sup');
+          const sideItem = sidebarBody.querySelector(`[data-sidebar-num="${num}"]`);
+          if (sideItem) {
+            sideItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            sidebarBody.querySelectorAll('.link-item').forEach(el => el.classList.remove('ext-active'));
+            sideItem.classList.add('ext-active');
+            sideItem.classList.add('ext-highlight');
+            setTimeout(() => sideItem.classList.remove('ext-highlight'), 1500);
+          }
+        });
+      });
+    }
+  }
+
   const matched   = changes.length;
   const unmatched = extState.bodyNums.length - matched;
-
-  downloadFile(newBody, bodyFile.replace(/(\.[^.]+)$/, '_linked$1'));
-  downloadFile(newExt,  extFile.replace(/(\.[^.]+)$/, '_linked$1'));
-
   if (unmatched > 0) {
     toast(`Done! ${matched} linked, ⚠️ ${unmatched} unmatched sups.`, 'warning');
   } else {
-    toast(`All ${matched} footnotes linked! Both files downloaded.`, 'success');
+    toast(`All ${matched} footnotes linked!`, 'success');
   }
 }
 
@@ -422,3 +574,18 @@ function downloadFile(content, filename) {
   a.click();
   URL.revokeObjectURL(url);
 }
+
+/* ── COPY BUTTONS ── */
+document.getElementById('btnCopyChapter').addEventListener('click', () => {
+  if (!extState.processedBody) { toast('No processed content yet.', 'error'); return; }
+  navigator.clipboard.writeText(extState.processedBody)
+    .then(() => toast('Chapter XHTML copied to clipboard!', 'success'))
+    .catch(() => toast('Copy failed.', 'error'));
+});
+
+document.getElementById('btnCopyFootnote').addEventListener('click', () => {
+  if (!extState.processedExt) { toast('No processed content yet.', 'error'); return; }
+  navigator.clipboard.writeText(extState.processedExt)
+    .then(() => toast('Footnote XHTML copied to clipboard!', 'success'))
+    .catch(() => toast('Copy failed.', 'error'));
+});

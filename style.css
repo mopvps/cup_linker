@@ -576,6 +576,22 @@ button:focus-visible,[tabindex]:focus-visible,a:focus-visible,input:focus-visibl
 }
 .status-ok{background:var(--pass-soft);color:var(--pass);}
 .status-fail{background:var(--fail-soft);color:var(--fail);}
+sup.sup-badge {
+  display:inline-grid;place-items:center;
+  min-width:18px;height:18px;
+  border-radius:var(--r-pill);
+  font-size:var(--fs-11);font-weight:700;
+  padding:0 4px;cursor:pointer;
+  transition:filter .15s;
+  vertical-align:super;
+  font-variant-numeric:tabular-nums;
+}
+sup.sup-badge:hover { filter: brightness(1.15); }
+sup.status-pending  { background:var(--surface-2); color:var(--muted); border:1px solid var(--border); }
+sup.status-green    { background:var(--pass-soft);  color:var(--pass);  border:1px solid var(--pass); }
+sup.status-red      { background:var(--fail-soft);  color:var(--fail);  border:1px solid var(--fail); }
+.ext-highlight      { outline: 2px solid var(--accent); border-radius:3px; }
+.link-item.ext-active { background: var(--accent-soft) !important; }
 
 /* ==========================================================
    TOOLTIP
