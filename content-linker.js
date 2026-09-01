@@ -197,10 +197,21 @@ function reformatTocBlock(raw) {
   const after  = raw.slice(tocEnd);
   const tocRaw = raw.slice(tocStart, tocEnd);
 
+  // Strip pagebreak spans before parsing (self-closing <span/> confuses DOMParser)
+  const pbSpans = [];
+  const tocSanitized = tocRaw.replace(
+    /<span\b[^>]*epub:type="pagebreak"[^>]*\/>/g,
+    (match) => {
+      const idx = pbSpans.length;
+      pbSpans.push(match);
+      return `<!--PB_${idx}-->`;
+    }
+  );
+
   // Parse and reformat using DOMParser
   const parser = new DOMParser();
   const doc    = parser.parseFromString(
-    `<html xmlns="http://www.w3.org/1999/xhtml"><body>${tocRaw}</body></html>`,
+    `<html xmlns="http://www.w3.org/1999/xhtml"><body>${tocSanitized}</body></html>`,
     'application/xhtml+xml'
   );
   const ul = doc.querySelector('ul');
@@ -236,6 +247,9 @@ function reformatTocBlock(raw) {
         if (node.nodeType === 1 && (node.tagName === 'ul' || node.tagName === 'UL')) continue;
         if (node.nodeType === 3) {
           inline += node.textContent.replace(/\s+/g, ' ').trim();
+        } else if (node.nodeType === 8) {
+          // Comment node — re-emit as HTML comment (preserves PB_ placeholders)
+          inline += `<!--${node.nodeValue}-->`;
         } else if (node.nodeType === 1) {
           const tmp = document.createElement('div');
           tmp.appendChild(node.cloneNode(true));
@@ -256,13 +270,23 @@ function reformatTocBlock(raw) {
   }
 
   const formatted = formatUl(ul, 0);
-  return reEncodeEntities(before + formatted + '\n' + after);
+  // Re-inject pagebreak spans
+  const restored = formatted.replace(/<!--PB_(\d+)-->/g, (_, i) => pbSpans[+i]);
+  return reEncodeEntities(before + restored + '\n' + after);
 }
 
 /* ══════════════════════════════════
    PROCESS
 ══════════════════════════════════ */
 clProcessBtn.addEventListener('click', () => {
+  const outerSpans = detectOuterPagebreakSpans(clState.contentRaw);
+  if (outerSpans.length) {
+    document.getElementById('clPbWarnList').innerHTML = outerSpans
+      .map(s => `<span class="pb-id-tag">${escapeHtml(s.id)}</span>`)
+      .join('');
+    document.getElementById('clPbWarnModal').hidden = false;
+    return;
+  }
   try {
     runAutoLink();
   } catch(err) {
@@ -354,6 +378,8 @@ function runAutoLink() {
     return `href="${href}"`;
   });
 
+  /* Fix any outer pagebreak spans before reformat */
+  output = fixOuterPagebreakSpans(output);
   /* Reformat the <ul class="toc"> block for readable output */
   output = reformatTocBlock(output);
 
@@ -550,6 +576,24 @@ const clResolveModalClose = document.getElementById('clResolveModalClose');
 const clResolveFileSelect = document.getElementById('clResolveFileSelect');
 const clResolveHeadingList= document.getElementById('clResolveHeadingList');
 const clResolveSearch     = document.getElementById('clResolveSearch');
+
+const clPbWarnModal   = document.getElementById('clPbWarnModal');
+const clPbWarnClose   = document.getElementById('clPbWarnClose');
+const clPbWarnCancel  = document.getElementById('clPbWarnCancel');
+const clPbWarnProceed = document.getElementById('clPbWarnProceed');
+const clPbWarnList    = document.getElementById('clPbWarnList');
+
+clPbWarnClose.addEventListener('click',  () => { clPbWarnModal.hidden = true; });
+clPbWarnCancel.addEventListener('click', () => { clPbWarnModal.hidden = true; });
+clPbWarnProceed.addEventListener('click', () => {
+  clPbWarnModal.hidden = true;
+  try {
+    runAutoLink();
+  } catch(err) {
+    toast('Error: ' + err.message, 'error');
+    console.error(err);
+  }
+});
 
 let clResolveTarget = null; // { resultIdx, sidebarItem, previewAnchor }
 let clHeadingBtns = [];
@@ -915,4 +959,24 @@ document.addEventListener('keydown', e => {
 ══════════════════════════════════ */
 function escapeHtml(str) {
   return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function detectOuterPagebreakSpans(raw) {
+  // Match <span epub:type="pagebreak".../> that appears between </li> and <li>
+  const pattern = /(?<=<\/li>[\s\r\n]*)<span\b[^>]*epub:type="pagebreak"[^>]*\/>/g;
+  return [...raw.matchAll(pattern)].map(m => {
+    const idMatch = m[0].match(/id="([^"]+)"/);
+    return { raw: m[0], id: idMatch ? idMatch[1] : '(no id)' };
+  });
+}
+
+function fixOuterPagebreakSpans(raw) {
+  // Move any <span epub:type="pagebreak"..."/> sitting between </li> and <li>
+  // into the preceding </li>, just before it closes.
+  return raw.replace(
+    /(<\/li>)([\s\r\n]*)(<span\b[^>]*epub:type="pagebreak"[^>]*\/>)([\s\r\n]*)(<li>|<li\s)/g,
+    (match, closeLi, ws1, span, ws2, nextLi) => {
+      return `${span}${closeLi}${ws1}${ws2}${nextLi}`;
+    }
+  );
 }
