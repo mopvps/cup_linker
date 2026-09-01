@@ -231,10 +231,10 @@ function processFile() {
 
   // ── STEP 1: Find all body sup numbers (outside footnotes section)
   // We split the doc into body part and footnotes part for safety
-  const fnSectionMatch = content.match(/<section[^>]*>\s*\r?\n\s*<h[1-6][^>]*>\s*\r?\n\s*<sc>notes<\/sc>[\s\S]*/i);
-  const bodyPart = fnSectionMatch ? content.slice(0, content.indexOf(fnSectionMatch[0])) : content;
-  const fnPart = fnSectionMatch ? fnSectionMatch[0] : '';
-  const fnOffset = fnSectionMatch ? content.indexOf(fnSectionMatch[0]) : content.length;
+  const fnSectionMatch = content.match(/<li[^>]*class="[^"]*fn[^"]*"/i);
+  const bodyPart = fnSectionMatch ? content.slice(0, fnSectionMatch.index) : content;
+  const fnPart = fnSectionMatch ? content.slice(fnSectionMatch.index) : '';
+  const fnOffset = fnSectionMatch ? fnSectionMatch.index : content.length;
 
   // Collect all sup numbers from body
   // Matches: <sup>\n  1  \n</sup>  OR  <sup>4</sup>
@@ -287,7 +287,7 @@ function processFile() {
     const num = item.num;
     const xfnId = `${prefix}_xfn${num}`;
     const fnId = `${prefix}_fn${num}`;
-    const replacement = `<sup>\n<a id="${xfnId}" href="#${fnId}">${num}</a>\n</sup>`;
+    const replacement = `<sup><a id="${xfnId}" href="#${fnId}">${num}</a></sup>`;
     newBodyPart = newBodyPart.slice(0, item.index) + replacement + newBodyPart.slice(item.index + item.full.length);
     changes.push({ line: lineNumberAt(content, item.index), before: item.full, after: replacement });
   }
@@ -306,7 +306,7 @@ function processFile() {
     // Replace inner sup (plain number) with linked sup
     const supMatch = /<sup>([\s\S]*?)<\/sup>/i.exec(item.fullLi);
     const oldSupFull = supMatch[0];
-    const newSupFull = `<sup>\n<a role="doc-backlink" id="${fnId}" href="#${xfnId}">${num}</a>\n</sup>`;
+    const newSupFull = `<sup><a role="doc-backlink" id="${fnId}" href="#${xfnId}">${num}</a></sup>`;
     newLi = item.fullLi.replace(oldSupFull, newSupFull);
 
     newFnPart = newFnPart.slice(0, item.index) + newLi + newFnPart.slice(item.index + item.fullLi.length);
@@ -332,9 +332,9 @@ function lineNumberAt(content, index) {
 
 /* ── PRE-SCAN: which sups already had an <a> before we processed ── */
 function scanPreLinked(content) {
-  const fnSectionMatch = content.match(/<section[^>]*>\s*\r?\n\s*<h[1-6][^>]*>\s*\r?\n\s*<sc>notes<\/sc>[\s\S]*/i);
-  const bodyPart = fnSectionMatch ? content.slice(0, content.indexOf(fnSectionMatch[0])) : content;
-  const fnPart = fnSectionMatch ? fnSectionMatch[0] : '';
+  const fnSectionMatch = content.match(/<li[^>]*class="[^"]*fn[^"]*"/i);
+  const bodyPart = fnSectionMatch ? content.slice(0, fnSectionMatch.index) : content;
+  const fnPart = fnSectionMatch ? content.slice(fnSectionMatch.index) : '';
 
   const preBody = new Set();
   const preFn = new Set();
@@ -361,8 +361,8 @@ function scanPreLinked(content) {
 
 /* ── FOOTNOTE TEXT MAP (num -> plain text snippet) ── */
 function scanFootnoteTexts(content) {
-  const fnSectionMatch = content.match(/<section[^>]*>\s*\r?\n\s*<h[1-6][^>]*>\s*\r?\n\s*<sc>notes<\/sc>[\s\S]*/i);
-  const fnPart = fnSectionMatch ? fnSectionMatch[0] : '';
+  const fnSectionMatch = content.match(/<li[^>]*class="[^"]*fn[^"]*"/i);
+  const fnPart = fnSectionMatch ? content.slice(fnSectionMatch.index) : '';
   const map = {};
 
   const liRe = /<li[^>]*class="[^"]*fn[^"]*"[^>]*>([\s\S]*?)<\/li>/gi;
@@ -535,9 +535,9 @@ function renderDocPreview(content) {
   let bodyHTML = bodyMatch ? bodyMatch[1] : content;
 
   // Split into body part / footnotes part, same rule as processFile()
-  const fnSectionMatch = bodyHTML.match(/<section[^>]*>\s*\r?\n\s*<h[1-6][^>]*>\s*\r?\n\s*<sc>notes<\/sc>[\s\S]*/i);
-  let bodyOnly = fnSectionMatch ? bodyHTML.slice(0, bodyHTML.indexOf(fnSectionMatch[0])) : bodyHTML;
-  let fnOnly = fnSectionMatch ? fnSectionMatch[0] : '';
+  const fnSectionMatch = bodyHTML.match(/<li[^>]*class="[^"]*fn[^"]*"/i);
+  let bodyOnly = fnSectionMatch ? bodyHTML.slice(0, fnSectionMatch.index) : bodyHTML;
+  let fnOnly = fnSectionMatch ? bodyHTML.slice(fnSectionMatch.index) : '';
 
   bodyOnly = replaceSupsWithBadges(bodyOnly, 'body');
   fnOnly = replaceSupsWithBadges(fnOnly, 'fn');
@@ -723,15 +723,15 @@ function deleteLink(role, num, recordHistory = true) {
   const beforeSnap = recordHistory ? snapshotState() : null;
   const beforeInfo = recordHistory ? getBadgeInfo(role, num) : null;
 
-  const fnSectionMatch = state.processedContent.match(/<section[^>]*>\s*\r?\n\s*<h[1-6][^>]*>\s*\r?\n\s*<sc>notes<\/sc>[\s\S]*/i);
-  const fnIdx = fnSectionMatch ? state.processedContent.indexOf(fnSectionMatch[0]) : state.processedContent.length;
+  const fnSectionMatch = state.processedContent.match(/<li[^>]*class="[^"]*fn[^"]*"/i);
+  const fnIdx = fnSectionMatch ? fnSectionMatch.index : state.processedContent.length;
   let bodyPart = state.processedContent.slice(0, fnIdx);
   let fnPart = state.processedContent.slice(fnIdx);
 
   const stripAnchor = (full, inner) => {
     const text = inner.replace(/<[^>]*>/g, '').trim();
     const m = text.match(/\d+/);
-    if (m && m[0] === num && /<a[\s>]/i.test(inner)) return `<sup>\n${num}\n</sup>`;
+    if (m && m[0] === num && /<a[\s>]/i.test(inner)) return `<sup>${num}</sup>`;
     return full;
   };
 
@@ -763,8 +763,8 @@ function changeLink(num, newFnNum, recordHistory = true) {
   const beforeInfo = recordHistory ? getBadgeInfo('body', num) : null;
 
   const prefix = state.prefix;
-  const fnSectionMatch = state.processedContent.match(/<section[^>]*>\s*\r?\n\s*<h[1-6][^>]*>\s*\r?\n\s*<sc>notes<\/sc>[\s\S]*/i);
-  const fnIdx = fnSectionMatch ? state.processedContent.indexOf(fnSectionMatch[0]) : state.processedContent.length;
+  const fnSectionMatch = state.processedContent.match(/<li[^>]*class="[^"]*fn[^"]*"/i);
+  const fnIdx = fnSectionMatch ? fnSectionMatch.index : state.processedContent.length;
   let bodyPart = state.processedContent.slice(0, fnIdx);
   const fnPart = state.processedContent.slice(fnIdx);
 
@@ -774,7 +774,7 @@ function changeLink(num, newFnNum, recordHistory = true) {
     if (m && m[0] === num) {
       const xfnId = `${prefix}_xfn${num}`;
       const fnId = `${prefix}_fn${newFnNum}`;
-      return `<sup>\n<a id="${xfnId}" href="#${fnId}">${num}</a>\n</sup>`;
+      return `<sup><a id="${xfnId}" href="#${fnId}">${num}</a></sup>`;
     }
     return full;
   });
