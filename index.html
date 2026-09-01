@@ -10,6 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700;800&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="style.css"/>
+<script src="config.js"></script>
 </head>
 <body>
 
@@ -904,5 +905,14 @@
 
 <script src="content-linker.js"></script>
 <script src="sup-tagger.js"></script>
+<script>
+  // Apply tab visibility from config.js
+  Object.entries(APP_CONFIG.tabs).forEach(([tab, cfg]) => {
+    if (!cfg.enabled) {
+      const btn = document.getElementById('tabBtn' + tab);
+      if (btn) btn.hidden = true;
+    }
+  });
+</script>
 </body>
 </html>
