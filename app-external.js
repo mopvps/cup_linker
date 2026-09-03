@@ -280,12 +280,12 @@ function scanBodySups(content) {
   let m;
   while ((m = re.exec(content)) !== null) {
     const inner = m[1].trim();
-    if (/^\d+$/.test(inner)) {
-      nums.push(inner);
+    if (/^\d+\.?$/.test(inner)) {
+      nums.push(inner.replace('.', ''));
     } else {
       // Already-linked: <a ...>NUMBER</a>
-      const aMatch = inner.match(/^<a[^>]*>(\d+)<\/a>$/i);
-      if (aMatch) nums.push(aMatch[1]);
+      const aMatch = inner.match(/^<a[^>]*>(\d+\.?)<\/a>$/i);
+      if (aMatch) nums.push(aMatch[1].replace('.', ''));
     }
   }
   return nums;
@@ -305,7 +305,7 @@ function renderChapterPreview(content) {
   // Badge bare and already-linked <sup>NUMBER</sup>
   preview.querySelectorAll('sup').forEach(sup => {
     const txt = sup.textContent.trim();
-    if (!/^\d+$/.test(txt)) return;
+    if (!/^\d+\.?$/.test(txt)) return;
     sup.classList.add('sup-badge', 'status-pending');
     sup.setAttribute('data-sup', txt);
   });
@@ -415,25 +415,25 @@ function processExternalLinks() {
   newBody = newBody.replace(/<sup>([\s\S]*?)<\/sup>/gi, (full, inner) => {
     const trimmed = inner.trim();
     // Bare number
-    if (/^\d+$/.test(trimmed)) {
-      const num = trimmed;
+    if (/^\d+\.?$/.test(trimmed)) {
+      const num = trimmed.replace('.', '');
       if (!fnMap[num]) return full;
       const padded = num.padStart(3, '0');
       const fnId   = `${prefix}-${padded}`;
       const bodyId = `${fnId}-fn`;
       changes.push({ num, bodyId, fnId });
-      return `<sup><a class="xref" href="${extFile}#${fnId}" id="${bodyId}">${num}</a></sup>`;
+      return `<sup><a class="xref" href="${extFile}#${fnId}" id="${bodyId}">${trimmed}</a></sup>`;
     }
     // Already-linked: <a ...>NUMBER</a>
-    const aMatch = trimmed.match(/^<a[^>]*>(\d+)<\/a>$/i);
+    const aMatch = trimmed.match(/^<a[^>]*>(\d+\.?)<\/a>$/i);
     if (aMatch) {
-      const num = aMatch[1];
+      const num = aMatch[1].replace('.', '');
       if (!fnMap[num]) return full;
       const padded = num.padStart(3, '0');
       const fnId   = `${prefix}-${padded}`;
       const bodyId = `${fnId}-fn`;
       changes.push({ num, bodyId, fnId });
-      return `<sup><a class="xref" href="${extFile}#${fnId}" id="${bodyId}">${num}</a></sup>`;
+      return `<sup><a class="xref" href="${extFile}#${fnId}" id="${bodyId}">${aMatch[1]}</a></sup>`;
     }
     return full;
   });

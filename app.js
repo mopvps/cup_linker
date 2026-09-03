@@ -249,9 +249,10 @@ function processFile() {
   while ((m = supRawRegex.exec(tempBodyPart)) !== null) {
     const inner = m[1].trim();
     // Only process if inner is a plain number (no existing anchor)
-    if (/^\d+$/.test(inner)) {
-      bodyNums.push(inner);
-      bodySupMatches.push({ num: inner, full: m[0], index: m.index });
+    if (/^\d+\.?$/.test(inner)) {
+      const num = inner.replace('.', '');
+      bodyNums.push(num);
+      bodySupMatches.push({ num, rawInner: inner, full: m[0], index: m.index });
     }
   }
 
@@ -264,10 +265,11 @@ function processFile() {
     const liContent = m[1];
     const supInFn = /<sup>([\s\S]*?)<\/sup>/i.exec(liContent);
     if (supInFn) {
-      const num = supInFn[1].trim();
-      if (/^\d+$/.test(num)) {
+      const rawInner = supInFn[1].trim();
+      const num = rawInner.replace('.', '');
+      if (/^\d+\.?$/.test(rawInner)) {
         fnNums.push(num);
-        fnLiMatches.push({ num, fullLi: m[0], index: m.index });
+        fnLiMatches.push({ num, rawInner, fullLi: m[0], index: m.index });
       }
     }
   }
@@ -285,9 +287,10 @@ function processFile() {
   const sortedBodyMatches = [...bodySupMatches].sort((a, b) => b.index - a.index);
   for (const item of sortedBodyMatches) {
     const num = item.num;
+    const displayText = item.rawInner || num;
     const xfnId = `${prefix}_xfn${num}`;
     const fnId = `${prefix}_fn${num}`;
-    const replacement = `<sup><a id="${xfnId}" href="#${fnId}">${num}</a></sup>`;
+    const replacement = `<sup><a id="${xfnId}" href="#${fnId}">${displayText}</a></sup>`;
     newBodyPart = newBodyPart.slice(0, item.index) + replacement + newBodyPart.slice(item.index + item.full.length);
     changes.push({ line: lineNumberAt(content, item.index), before: item.full, after: replacement });
   }
@@ -298,6 +301,7 @@ function processFile() {
   const sortedFnMatches = [...fnLiMatches].sort((a, b) => b.index - a.index);
   for (const item of sortedFnMatches) {
     const num = item.num;
+    const displayText = item.rawInner || num;
     const xfnId = `${prefix}_xfn${num}`;
     const fnId = `${prefix}_fn${num}`;
 
@@ -306,7 +310,7 @@ function processFile() {
     // Replace inner sup (plain number) with linked sup
     const supMatch = /<sup>([\s\S]*?)<\/sup>/i.exec(item.fullLi);
     const oldSupFull = supMatch[0];
-    const newSupFull = `<sup><a role="doc-backlink" id="${fnId}" href="#${xfnId}">${num}</a></sup>`;
+    const newSupFull = `<sup><a role="doc-backlink" id="${fnId}" href="#${xfnId}">${displayText}</a></sup>`;
     newLi = item.fullLi.replace(oldSupFull, newSupFull);
 
     newFnPart = newFnPart.slice(0, item.index) + newLi + newFnPart.slice(item.index + item.fullLi.length);
