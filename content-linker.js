@@ -2,56 +2,56 @@
 
 /* ── State ── */
 const clState = {
-  folderFiles:     [],
-  fileIndex:       [],  // [{ name, headings:[{ level, id, text }] }]
+  folderFiles: [],
+  fileIndex: [],  // [{ name, headings:[{ level, id, text }] }]
   contentFileName: '',
-  contentRaw:      '',
-  results:         [],  // [{ tocText, resolved, status }]
+  contentRaw: '',
+  results: [],  // [{ tocText, resolved, status }]
   resolvedContent: '',
 };
 let clDupeHrefs = new Set();
 
 /* ── DOM ── */
-const clFolderPickBtn  = document.getElementById('clFolderPickBtn');
-const clFolderInput    = document.getElementById('clFolderInput');
+const clFolderPickBtn = document.getElementById('clFolderPickBtn');
+const clFolderInput = document.getElementById('clFolderInput');
 const clFolderPickText = document.getElementById('clFolderPickText');
-const clFolderStatus   = document.getElementById('clFolderStatus');
-const clFolderCheck    = document.getElementById('clFolderCheck');
-const clStep1          = document.getElementById('clStep1');
+const clFolderStatus = document.getElementById('clFolderStatus');
+const clFolderCheck = document.getElementById('clFolderCheck');
+const clStep1 = document.getElementById('clStep1');
 
-const clFilePickBtn    = document.getElementById('clFilePickBtn');
-const clFileInput      = document.getElementById('clFileInput');
-const clFilePickText   = document.getElementById('clFilePickText');
-const clFileStatus     = document.getElementById('clFileStatus');
-const clFileCheck      = document.getElementById('clFileCheck');
-const clStep2          = document.getElementById('clStep2');
+const clFilePickBtn = document.getElementById('clFilePickBtn');
+const clFileInput = document.getElementById('clFileInput');
+const clFilePickText = document.getElementById('clFilePickText');
+const clFileStatus = document.getElementById('clFileStatus');
+const clFileCheck = document.getElementById('clFileCheck');
+const clStep2 = document.getElementById('clStep2');
 
-const clProcessBtn     = document.getElementById('clProcessBtn');
-const clEmptyState     = document.getElementById('clEmptyState');
-const clWorkspace      = document.getElementById('clWorkspace');
-const clContentArea    = document.getElementById('clContentArea');
-const clResultsList    = document.getElementById('clResultsList');
-const clStatMatched    = document.getElementById('clStatMatched');
+const clProcessBtn = document.getElementById('clProcessBtn');
+const clEmptyState = document.getElementById('clEmptyState');
+const clWorkspace = document.getElementById('clWorkspace');
+const clContentArea = document.getElementById('clContentArea');
+const clResultsList = document.getElementById('clResultsList');
+const clStatMatched = document.getElementById('clStatMatched');
 const clStatUnresolved = document.getElementById('clStatUnresolved');
-const clStatDupe       = document.getElementById('clStatDupe');
-const clProgressBar     = document.getElementById('clProgressBar');
+const clStatDupe = document.getElementById('clStatDupe');
+const clProgressBar = document.getElementById('clProgressBar');
 const clProgressBarWrap = document.getElementById('clProgressBarWrap');
-const clProgressText    = document.getElementById('clProgressText');
+const clProgressText = document.getElementById('clProgressText');
 
 function updateProgressBar() {
-  const total   = clState.results.length;
+  const total = clState.results.length;
   const matched = clState.results.filter(r => r.status === 'matched').length;
-  const pct     = total ? (matched / total * 100).toFixed(1) : 0;
+  const pct = total ? (matched / total * 100).toFixed(1) : 0;
   clProgressBar.style.width = pct + '%';
   clProgressText.textContent = matched + ' / ' + total;
   clProgressBar.style.background = (matched === total)
     ? 'var(--success,#38a169)'
     : 'var(--accent,#2B3A9C)';
 }
-const clDownloadBtn    = document.getElementById('clDownloadBtn');
-const clCopyReportBtn  = document.getElementById('clCopyReportBtn');
-const clCopyXhtmlBtn   = document.getElementById('clCopyXhtmlBtn');
-const clTooltip        = document.getElementById('clTooltip');
+const clDownloadBtn = document.getElementById('clDownloadBtn');
+const clCopyReportBtn = document.getElementById('clCopyReportBtn');
+const clCopyXhtmlBtn = document.getElementById('clCopyXhtmlBtn');
+const clTooltip = document.getElementById('clTooltip');
 
 /* Find hrefs used by more than one matched result */
 function findDuplicateHrefs(results) {
@@ -99,11 +99,11 @@ function readAndIndexFile(file) {
     const reader = new FileReader();
     reader.onload = e => {
       const content = e.target.result;
-      const parser  = new DOMParser();
-      const doc     = parser.parseFromString(content, 'application/xhtml+xml');
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(content, 'application/xhtml+xml');
       const headings = [];
       doc.querySelectorAll('h1,h2,h3,h4,h5').forEach(el => {
-        const id   = el.getAttribute('id');
+        const id = el.getAttribute('id');
         const text = normalizeText(el.textContent);
         const level = parseInt(el.tagName[1]);
         headings.push({ level, id, text });
@@ -186,15 +186,19 @@ function innerPlainText(html) {
   return normalizeText(tmp.textContent);
 }
 
-/* Reformat <ul class="toc">...</ul> block — collapse <li> to single lines with proper indentation */
+/* Reformat <ul>...</ul> block — collapse <li> to single lines with proper indentation */
 function reformatTocBlock(raw) {
   // Extract the toc ul block
-  const tocStart = raw.indexOf('<ul class="toc">');
-  const tocEnd   = raw.lastIndexOf('</ul>') + 5;
-  if (tocStart === -1) return raw;
+  const match = raw.match(/<ul\b[^>]*>/i);
+  if (!match) return raw;
+
+  const tocStart = match.index;
+  const lastUl = raw.lastIndexOf('</ul>');
+  if (lastUl === -1 || lastUl < tocStart) return raw;
+  const tocEnd = lastUl + 5;
 
   const before = raw.slice(0, tocStart);
-  const after  = raw.slice(tocEnd);
+  const after = raw.slice(tocEnd);
   const tocRaw = raw.slice(tocStart, tocEnd);
 
   // Strip pagebreak spans before parsing (self-closing <span/> confuses DOMParser)
@@ -210,16 +214,28 @@ function reformatTocBlock(raw) {
 
   // Parse and reformat using DOMParser
   const parser = new DOMParser();
-  const doc    = parser.parseFromString(
+  let doc = parser.parseFromString(
     `<html xmlns="http://www.w3.org/1999/xhtml"><body>${tocSanitized}</body></html>`,
     'application/xhtml+xml'
   );
+  if (doc.querySelector('parsererror')) {
+    doc = parser.parseFromString(
+      `<!DOCTYPE html><html><body>${tocSanitized}</body></html>`,
+      'text/html'
+    );
+  }
   const ul = doc.querySelector('ul');
   if (!ul) return raw;
 
   function formatUl(ulEl, depth) {
     const indent = '  '.repeat(depth);
-    let out = `${indent}<ul${ulEl === doc.querySelector('ul') ? ' class="toc"' : ''}>\n`;
+    let rootAttrs = '';
+    if (ulEl === ul) {
+      for (const attr of ulEl.attributes) {
+        rootAttrs += ` ${attr.name}="${attr.value}"`;
+      }
+    }
+    let out = `${indent}<ul${rootAttrs}>\n`;
     for (const child of ulEl.children) {
       const tag = child.tagName.toLowerCase();
 
@@ -289,7 +305,7 @@ clProcessBtn.addEventListener('click', () => {
   }
   try {
     runAutoLink();
-  } catch(err) {
+  } catch (err) {
     toast('Error: ' + err.message, 'error');
     console.error(err);
   }
@@ -306,7 +322,7 @@ function runAutoLink() {
   /* Build two pools (consumed in order to handle duplicates like "Summary"):
      - h1Pool: for top-level chapter/frontmatter entries
      - subPool: for h2-h5 entries                          */
-  const h1Pool  = [];
+  const h1Pool = [];
   const subPool = [];
 
   index.forEach(file => {
@@ -320,14 +336,14 @@ function runAutoLink() {
   });
 
   /* Parse the TOC content file */
-  const parser  = new DOMParser();
-  const doc     = parser.parseFromString(clState.contentRaw, 'application/xhtml+xml');
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(clState.contentRaw, 'application/xhtml+xml');
 
   const results = [];
 
   /* Find all <a href="{0}"> and resolve each */
   doc.querySelectorAll('a[href="{0}"]').forEach(anchor => {
-    const rawText   = normalizeText(anchor.textContent);
+    const rawText = normalizeText(anchor.textContent);
     const strippedText = stripLeadingNumber(rawText);
 
     let resolved = null;
@@ -393,23 +409,23 @@ function runAutoLink() {
    RENDER
 ══════════════════════════════════ */
 function renderResults(results, doc) {
-  const matched    = results.filter(r => r.status === 'matched').length;
+  const matched = results.filter(r => r.status === 'matched').length;
   const unresolved = results.filter(r => r.status === 'unresolved').length;
-  const dupeHrefs  = findDuplicateHrefs(results);
+  const dupeHrefs = findDuplicateHrefs(results);
   clDupeHrefs = dupeHrefs;
 
   /* Stats */
-  clStatMatched.textContent    = matched;
+  clStatMatched.textContent = matched;
   clStatUnresolved.textContent = unresolved;
   clStatUnresolved.style.color = unresolved > 0 ? 'var(--fail)' : 'var(--pass)';
-  clStatDupe.textContent       = dupeHrefs.size;
+  clStatDupe.textContent = dupeHrefs.size;
   updateProgressBar();
 
   /* Middle: render TOC preview */
-  const tocUl = doc.querySelector('ul.toc');
-  if (tocUl) {
+  const tocContainer = doc.querySelector('section.contents, section[epub\\:type="toc"], section[role="doc-toc"], nav[epub\\:type="toc"], nav[role="doc-toc"], ul.toc, ul') || doc.body;
+  if (tocContainer) {
     const serializer = new XMLSerializer();
-    let tocHtml = serializer.serializeToString(tocUl);
+    let tocHtml = serializer.serializeToString(tocContainer);
     clContentArea.innerHTML = `<div class="cl-toc-preview">${tocHtml}</div>`;
   } else {
     clContentArea.innerHTML = `<pre style="font-size:0.8rem;white-space:pre-wrap;">${escapeHtml(clState.resolvedContent)}</pre>`;
@@ -425,20 +441,20 @@ function renderResults(results, doc) {
     const href = a.getAttribute('href');
     a.dataset.resultIdx = aIdx;
     if (!href || href === '{0}') {
-      a.style.color          = 'var(--danger, #e53e3e)';
+      a.style.color = 'var(--danger, #e53e3e)';
       a.style.textDecoration = 'line-through';
     } else if (dupeHrefs.has(href)) {
-      a.style.color               = 'var(--warning, #d97706)';
-      a.style.textDecoration      = 'underline';
+      a.style.color = 'var(--warning, #d97706)';
+      a.style.textDecoration = 'underline';
       a.style.textDecorationColor = 'var(--warning, #d97706)';
-      a.style.outline             = '1px solid var(--warning, #d97706)';
-      a.style.borderRadius        = '3px';
-      a.style.padding             = '0 2px';
+      a.style.outline = '1px solid var(--warning, #d97706)';
+      a.style.borderRadius = '3px';
+      a.style.padding = '0 2px';
     } else {
-      a.style.color         = 'var(--success, #38a169)';
+      a.style.color = 'var(--success, #38a169)';
     }
     a.style.pointerEvents = 'auto';
-    a.style.cursor        = 'pointer';
+    a.style.cursor = 'pointer';
     a.addEventListener('click', e => {
       e.preventDefault();
       openResolvePopup(+a.dataset.resultIdx);
@@ -489,11 +505,11 @@ function renderResults(results, doc) {
       }
       clTooltip.style.display = 'block';
       clTooltip.style.left = (e.clientX + 12) + 'px';
-      clTooltip.style.top  = (e.clientY - 28) + 'px';
+      clTooltip.style.top = (e.clientY - 28) + 'px';
     });
     a.addEventListener('mousemove', e => {
       clTooltip.style.left = (e.clientX + 12) + 'px';
-      clTooltip.style.top  = (e.clientY - 28) + 'px';
+      clTooltip.style.top = (e.clientY - 28) + 'px';
     });
     a.addEventListener('mouseleave', () => {
       clTooltip.style.display = 'none';
@@ -509,7 +525,7 @@ function renderResults(results, doc) {
     item.className = 'cl-result-item';
     item.dataset.resultIdx = i;
     item.style.cssText = `padding:6px 8px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:2px;cursor:pointer;`;
-    const icon  = r.status === 'matched' ? '✓' : '✗';
+    const icon = r.status === 'matched' ? '✓' : '✗';
     const color = r.status === 'matched' ? 'var(--success,#38a169)' : 'var(--danger,#e53e3e)';
     item.addEventListener('click', () => {
       const anchor = clContentArea.querySelector(`a[data-result-idx="${i}"]`);
@@ -549,17 +565,17 @@ function renderResults(results, doc) {
   });
 
   /* Enable buttons */
-  clDownloadBtn.disabled    = false;
-  clCopyReportBtn.disabled  = false;
-  clCopyXhtmlBtn.disabled   = false;
+  clDownloadBtn.disabled = false;
+  clCopyReportBtn.disabled = false;
+  clCopyXhtmlBtn.disabled = false;
 
   /* Show workspace */
-clEmptyState.hidden = true;
-clWorkspace.hidden  = false;
-clWorkspace.style.display = 'flex';
-clWorkspace.style.flexDirection = 'column';
-clWorkspace.style.flex = '1';
-clWorkspace.style.overflow = 'hidden';
+  clEmptyState.hidden = true;
+  clWorkspace.hidden = false;
+  clWorkspace.style.display = 'flex';
+  clWorkspace.style.flexDirection = 'column';
+  clWorkspace.style.flex = '1';
+  clWorkspace.style.overflow = 'hidden';
 
   const msg = unresolved > 0
     ? `Done! ${matched} matched, ⚠️ ${unresolved} unresolved.`
@@ -570,26 +586,26 @@ clWorkspace.style.overflow = 'hidden';
 /* ══════════════════════════════════
    RESOLVE POPUP
 ══════════════════════════════════ */
-const clResolveModal      = document.getElementById('clResolveModal');
+const clResolveModal = document.getElementById('clResolveModal');
 const clResolveModalTitle = document.getElementById('clResolveModalTitle');
 const clResolveModalClose = document.getElementById('clResolveModalClose');
 const clResolveFileSelect = document.getElementById('clResolveFileSelect');
-const clResolveHeadingList= document.getElementById('clResolveHeadingList');
-const clResolveSearch     = document.getElementById('clResolveSearch');
+const clResolveHeadingList = document.getElementById('clResolveHeadingList');
+const clResolveSearch = document.getElementById('clResolveSearch');
 
-const clPbWarnModal   = document.getElementById('clPbWarnModal');
-const clPbWarnClose   = document.getElementById('clPbWarnClose');
-const clPbWarnCancel  = document.getElementById('clPbWarnCancel');
+const clPbWarnModal = document.getElementById('clPbWarnModal');
+const clPbWarnClose = document.getElementById('clPbWarnClose');
+const clPbWarnCancel = document.getElementById('clPbWarnCancel');
 const clPbWarnProceed = document.getElementById('clPbWarnProceed');
-const clPbWarnList    = document.getElementById('clPbWarnList');
+const clPbWarnList = document.getElementById('clPbWarnList');
 
-clPbWarnClose.addEventListener('click',  () => { clPbWarnModal.hidden = true; });
+clPbWarnClose.addEventListener('click', () => { clPbWarnModal.hidden = true; });
 clPbWarnCancel.addEventListener('click', () => { clPbWarnModal.hidden = true; });
 clPbWarnProceed.addEventListener('click', () => {
   clPbWarnModal.hidden = true;
   try {
     runAutoLink();
-  } catch(err) {
+  } catch (err) {
     toast('Error: ' + err.message, 'error');
     console.error(err);
   }
@@ -681,11 +697,11 @@ function openResolvePopup(resultIdx) {
   clHeadingBtns = [];
 
   // Find matching sidebar item and preview anchor
-  const sidebarItems   = clResultsList.querySelectorAll('[data-result-idx]');
+  const sidebarItems = clResultsList.querySelectorAll('[data-result-idx]');
   const previewAnchors = clContentArea.querySelectorAll('a[data-result-idx]');
   clResolveTarget = {
     resultIdx,
-    sidebarItem:   [...sidebarItems].find(el => +el.dataset.resultIdx === resultIdx),
+    sidebarItem: [...sidebarItems].find(el => +el.dataset.resultIdx === resultIdx),
     previewAnchor: [...previewAnchors].find(el => +el.dataset.resultIdx === resultIdx),
   };
   clResolveModal.hidden = false;
@@ -697,7 +713,7 @@ function applyResolvedLink(resolved) {
 
   // Update state
   clState.results[resultIdx].resolved = resolved;
-  clState.results[resultIdx].status   = 'matched';
+  clState.results[resultIdx].status = 'matched';
 
   // Update raw output — replace the specific {0} at correct position by rebuilding
   const resolvedHrefs = clState.results.map(r => r.resolved || '{0}');
@@ -717,9 +733,9 @@ function applyResolvedLink(resolved) {
   // Update sidebar item
   if (sidebarItem) {
     const spans = sidebarItem.querySelectorAll('span');
-    spans[0].style.color    = 'var(--success,#38a169)';
-    spans[0].textContent    = `✓ ${clState.results[resultIdx].tocText}`;
-    spans[1].textContent    = resolved;
+    spans[0].style.color = 'var(--success,#38a169)';
+    spans[0].textContent = `✓ ${clState.results[resultIdx].tocText}`;
+    spans[1].textContent = resolved;
   }
 
   // Re-check duplicate hrefs across all results and re-apply/remove DUP styling
@@ -734,19 +750,19 @@ function applyResolvedLink(resolved) {
     a.style.padding = '';
     a.style.textDecorationColor = '';
     if (!href || href === '{0}') {
-      a.style.color          = 'var(--danger, #e53e3e)';
+      a.style.color = 'var(--danger, #e53e3e)';
       a.style.textDecoration = 'line-through';
-      a.style.pointerEvents  = 'auto';
-      a.style.cursor         = 'pointer';
+      a.style.pointerEvents = 'auto';
+      a.style.cursor = 'pointer';
     } else if (dupeHrefs.has(href)) {
-      a.style.color               = 'var(--warning, #d97706)';
-      a.style.textDecoration      = 'underline';
+      a.style.color = 'var(--warning, #d97706)';
+      a.style.textDecoration = 'underline';
       a.style.textDecorationColor = 'var(--warning, #d97706)';
-      a.style.outline             = '1px solid var(--warning, #d97706)';
-      a.style.borderRadius        = '3px';
-      a.style.padding             = '0 2px';
-      a.style.pointerEvents       = 'auto';
-      a.style.cursor              = 'pointer';
+      a.style.outline = '1px solid var(--warning, #d97706)';
+      a.style.borderRadius = '3px';
+      a.style.padding = '0 2px';
+      a.style.pointerEvents = 'auto';
+      a.style.cursor = 'pointer';
       if (!a.dataset.clickBound) {
         a.dataset.clickBound = '1';
         a.addEventListener('click', e => {
@@ -755,10 +771,10 @@ function applyResolvedLink(resolved) {
         });
       }
     } else {
-      a.style.color          = 'var(--success, #38a169)';
+      a.style.color = 'var(--success, #38a169)';
       a.style.textDecoration = 'none';
-      a.style.pointerEvents  = 'auto';
-      a.style.cursor         = 'pointer';
+      a.style.pointerEvents = 'auto';
+      a.style.cursor = 'pointer';
     }
 
     // Update inline file badge to reflect the (possibly new) href
@@ -802,12 +818,12 @@ function applyResolvedLink(resolved) {
       }
       clTooltip.style.display = 'block';
       clTooltip.style.left = (e.clientX + 12) + 'px';
-      clTooltip.style.top  = (e.clientY - 28) + 'px';
+      clTooltip.style.top = (e.clientY - 28) + 'px';
     });
 
     newAnchor.addEventListener('mousemove', e => {
       clTooltip.style.left = (e.clientX + 12) + 'px';
-      clTooltip.style.top  = (e.clientY - 28) + 'px';
+      clTooltip.style.top = (e.clientY - 28) + 'px';
     });
 
     newAnchor.addEventListener('mouseleave', () => {
@@ -852,12 +868,12 @@ function applyResolvedLink(resolved) {
   });
 
   // Update stats
-  const matched    = clState.results.filter(r => r.status === 'matched').length;
+  const matched = clState.results.filter(r => r.status === 'matched').length;
   const unresolved = clState.results.filter(r => r.status === 'unresolved').length;
-  clStatMatched.textContent    = matched;
+  clStatMatched.textContent = matched;
   clStatUnresolved.textContent = unresolved;
   clStatUnresolved.style.color = unresolved > 0 ? 'var(--fail)' : 'var(--pass)';
-  clStatDupe.textContent       = dupeHrefs.size;
+  clStatDupe.textContent = dupeHrefs.size;
   updateProgressBar();
 
   toast(`Linked to ${resolved}`, 'success');
@@ -878,8 +894,8 @@ clCopyXhtmlBtn.addEventListener('click', () => {
 clDownloadBtn.addEventListener('click', () => {
   const filename = clState.contentFileName.replace(/(\.[^.]+)$/, '_linked$1');
   const blob = new Blob([clState.resolvedContent], { type: 'application/xhtml+xml;charset=utf-8' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
   a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
   toast(`Downloaded: ${filename}`, 'success');
@@ -958,7 +974,7 @@ document.addEventListener('keydown', e => {
    UTILS
 ══════════════════════════════════ */
 function escapeHtml(str) {
-  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function detectOuterPagebreakSpans(raw) {
