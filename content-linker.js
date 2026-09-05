@@ -100,7 +100,10 @@ function readAndIndexFile(file) {
     reader.onload = e => {
       const content = e.target.result;
       const parser = new DOMParser();
-      const doc = parser.parseFromString(content, 'application/xhtml+xml');
+      let doc = parser.parseFromString(content, 'application/xhtml+xml');
+      if (doc.querySelector('parsererror')) {
+        doc = parser.parseFromString(content, 'text/html');
+      }
       const headings = [];
       doc.querySelectorAll('h1,h2,h3,h4,h5').forEach(el => {
         const id = el.getAttribute('id');
@@ -174,9 +177,12 @@ function normalizeText(str) {
   return str.replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
-/* Strip leading number from TOC bold entries: "1 The issues" → "the issues" */
+/* Strip leading number/roman numerals from TOC entries: "1 The issues" → "the issues", "I Summary" → "summary" */
 function stripLeadingNumber(str) {
-  return str.replace(/^\d+[\s.]+/, '').trim().toLowerCase();
+  return str
+    .replace(/^([0-9]+|[ivxlcdm]+)[\s.:)]+/i, '')
+    .trim()
+    .toLowerCase();
 }
 
 /* Extract plain text from an element's innerHTML (strips all tags) */
@@ -198,7 +204,7 @@ function reformatTocBlock(raw) {
   const tocEnd = lastUl + 5;
 
   const before = raw.slice(0, tocStart);
-  const after = raw.slice(tocEnd);
+  let after = raw.slice(tocEnd);
   const tocRaw = raw.slice(tocStart, tocEnd);
 
   // Strip pagebreak spans before parsing (self-closing <span/> confuses DOMParser)
@@ -224,71 +230,89 @@ function reformatTocBlock(raw) {
       'text/html'
     );
   }
-  const ul = doc.querySelector('ul');
-  if (!ul) return raw;
-
-  function formatUl(ulEl, depth) {
+  function formatNode(node, depth) {
     const indent = '  '.repeat(depth);
-    let rootAttrs = '';
-    if (ulEl === ul) {
-      for (const attr of ulEl.attributes) {
-        rootAttrs += ` ${attr.name}="${attr.value}"`;
-      }
+    if (node.nodeType === 3) {
+      const txt = node.textContent.replace(/\s+/g, ' ').trim();
+      return txt ? `${indent}${txt}\n` : '';
     }
-    let out = `${indent}<ul${rootAttrs}>\n`;
-    for (const child of ulEl.children) {
-      const tag = child.tagName.toLowerCase();
+    if (node.nodeType === 8) {
+      return `${indent}<!--${node.nodeValue}-->\n`;
+    }
+    if (node.nodeType !== 1) return '';
 
-      // Handle <p> tags — preserve as-is with indentation
-      if (tag === 'p') {
-        const tmp = document.createElement('div');
-        tmp.appendChild(child.cloneNode(true));
-        let pHtml = tmp.innerHTML.replace(/\s+/g, ' ').trim();
-        out += `${indent}  ${pHtml}\n`;
-        continue;
+    const tag = node.tagName.toLowerCase();
+
+    // Handle <ul> and <ol>
+    if (tag === 'ul' || tag === 'ol') {
+      let attrs = '';
+      for (const attr of node.attributes) {
+        attrs += ` ${attr.name}="${attr.value}"`;
       }
-
-      // Handle standalone <ul> (not inside <li>) — recurse
-      if (tag === 'ul') {
-        out += formatUl(child, depth + 1) + '\n';
-        continue;
+      let out = `${indent}<${tag}${attrs}>\n`;
+      for (const child of node.childNodes) {
+        if (child.nodeType === 3 && !child.textContent.trim()) continue;
+        out += formatNode(child, depth + 1);
       }
+      out += `${indent}</${tag}>\n`;
+      return out;
+    }
 
-      // Handle <li> as before
-      if (tag !== 'li') continue;
-
-      const childUl = child.querySelector(':scope > ul');
+    // Handle <li>
+    if (tag === 'li') {
+      const childUl = node.querySelector(':scope > ul, :scope > ol');
       let inline = '';
-      for (const node of child.childNodes) {
-        if (node.nodeType === 1 && (node.tagName === 'ul' || node.tagName === 'UL')) continue;
-        if (node.nodeType === 3) {
-          inline += node.textContent.replace(/\s+/g, ' ').trim();
-        } else if (node.nodeType === 8) {
-          // Comment node — re-emit as HTML comment (preserves PB_ placeholders)
-          inline += `<!--${node.nodeValue}-->`;
-        } else if (node.nodeType === 1) {
+      for (const childNode of node.childNodes) {
+        if (childNode.nodeType === 1 && (childNode.tagName.toLowerCase() === 'ul' || childNode.tagName.toLowerCase() === 'ol')) continue;
+        if (childNode.nodeType === 3) {
+          inline += childNode.textContent.replace(/\s+/g, ' ');
+        } else if (childNode.nodeType === 8) {
+          inline += `<!--${childNode.nodeValue}-->`;
+        } else if (childNode.nodeType === 1) {
           const tmp = document.createElement('div');
-          tmp.appendChild(node.cloneNode(true));
+          tmp.appendChild(childNode.cloneNode(true));
           inline += tmp.innerHTML;
         }
       }
       inline = inline.replace(/>\s+</g, '><').replace(/\s+/g, ' ').trim();
+      let out = '';
       if (childUl) {
-        out += `${indent}  <li>${inline}\n`;
-        out += formatUl(childUl, depth + 2);
-        out += `${indent}  </li>\n`;
+        out += `${indent}<li>${inline}\n`;
+        out += formatNode(childUl, depth + 1);
+        out += `${indent}</li>\n`;
       } else {
-        out += `${indent}  <li>${inline}</li>\n`;
+        out += `${indent}<li>${inline}</li>\n`;
       }
+      return out;
     }
-    out += `${indent}</ul>`;
-    return out;
+
+    // Handle <p> or other elements
+    const tmp = document.createElement('div');
+    tmp.appendChild(node.cloneNode(true));
+    let pHtml = tmp.innerHTML.replace(/\s+/g, ' ').trim();
+    let attrs = '';
+    for (const attr of node.attributes) {
+      attrs += ` ${attr.name}="${attr.value}"`;
+    }
+    return `${indent}<${tag}${attrs}>${pHtml}</${tag}>\n`;
   }
 
-  const formatted = formatUl(ul, 0);
+  let formatted = '';
+  for (const child of doc.body.childNodes) {
+    if (child.nodeType === 3 && !child.textContent.trim()) continue;
+    formatted += formatNode(child, 0);
+  }
+
+  if (!formatted.trim()) return raw;
+
+  // Clean up any orphaned trailing </li> in after if formatted already closed it
+  if (formatted.trimEnd().endsWith('</li>')) {
+    after = after.replace(/^[\s\r\n]*<\/li>/i, '');
+  }
+
   // Re-inject pagebreak spans
   const restored = formatted.replace(/<!--PB_(\d+)-->/g, (_, i) => pbSpans[+i]);
-  return reEncodeEntities(before + restored + '\n' + after);
+  return reEncodeEntities(before + restored + after);
 }
 
 /* ══════════════════════════════════
@@ -337,7 +361,10 @@ function runAutoLink() {
 
   /* Parse the TOC content file */
   const parser = new DOMParser();
-  const doc = parser.parseFromString(clState.contentRaw, 'application/xhtml+xml');
+  let doc = parser.parseFromString(clState.contentRaw, 'application/xhtml+xml');
+  if (doc.querySelector('parsererror')) {
+    doc = parser.parseFromString(clState.contentRaw, 'text/html');
+  }
 
   const results = [];
 
@@ -493,14 +520,15 @@ function renderResults(results, doc) {
 
     /* Custom hover tooltip (DOM only) */
     a.addEventListener('mouseenter', e => {
-      if (!href || href === '{0}') {
+      const curHref = a.getAttribute('href');
+      if (!curHref || curHref === '{0}') {
         clTooltip.textContent = 'Unresolved — click to fix';
         clTooltip.style.borderColor = 'var(--danger,#e53e3e)';
-      } else if (dupeHrefs.has(href)) {
-        clTooltip.textContent = '⚠ Duplicate ID: ' + href;
+      } else if (clDupeHrefs.has(curHref)) {
+        clTooltip.textContent = '⚠ Duplicate ID: ' + curHref;
         clTooltip.style.borderColor = 'var(--warning,#d97706)';
       } else {
-        clTooltip.textContent = '🔗 ' + href;
+        clTooltip.textContent = '🔗 ' + curHref;
         clTooltip.style.borderColor = 'var(--accent,#2B3A9C)';
       }
       clTooltip.style.display = 'block';
@@ -592,6 +620,7 @@ const clResolveModalClose = document.getElementById('clResolveModalClose');
 const clResolveFileSelect = document.getElementById('clResolveFileSelect');
 const clResolveHeadingList = document.getElementById('clResolveHeadingList');
 const clResolveSearch = document.getElementById('clResolveSearch');
+const clResolveUnlinkBtn = document.getElementById('clResolveUnlinkBtn');
 
 const clPbWarnModal = document.getElementById('clPbWarnModal');
 const clPbWarnClose = document.getElementById('clPbWarnClose');
@@ -619,23 +648,56 @@ clResolveModalClose.addEventListener('click', () => {
   clResolveTarget = null;
 });
 
+if (clResolveUnlinkBtn) {
+  clResolveUnlinkBtn.addEventListener('click', () => {
+    if (!clResolveTarget) return;
+    applyResolvedLink(null);
+    clResolveModal.hidden = true;
+    clResolveTarget = null;
+  });
+}
+
 function renderResolveHeadings(fileName) {
-  const entry = clState.fileIndex.find(f => f.name === fileName);
   clResolveHeadingList.innerHTML = '';
-  if (!entry || !entry.headings.length) {
-    clResolveHeadingList.innerHTML = '<div style="padding:10px 12px;color:var(--muted);font-size:0.8rem;">No headings found.</div>';
+  const isAllFiles = !fileName;
+
+  let list = [];
+  if (isAllFiles) {
+    clState.fileIndex.forEach(file => {
+      file.headings.forEach(h => {
+        list.push({ file: file.name, heading: h });
+      });
+    });
+  } else {
+    const entry = clState.fileIndex.find(f => f.name === fileName);
+    if (entry && entry.headings) {
+      entry.headings.forEach(h => {
+        list.push({ file: fileName, heading: h });
+      });
+    }
+  }
+
+  if (!list.length) {
+    clResolveHeadingList.innerHTML = `<div class="cl-resolve-placeholder">${isAllFiles ? 'No headings found in indexed files.' : 'No headings found in this file.'}</div>`;
+    clHeadingBtns = [];
     return;
   }
 
-  entry.headings.forEach(h => {
+  const q = clResolveSearch.value.trim().toLowerCase();
+
+  list.forEach(({ file, heading: h }) => {
     const btn = document.createElement('button');
+    btn.type = 'button';
     btn.className = 'popup-item cl-heading-item';
     btn.innerHTML = `
       <span class="cl-heading-level">H${h.level}</span>
-      <span class="cl-heading-text">${escapeHtml(h.text)}</span>
+      <div class="cl-heading-info">
+        <span class="cl-heading-text">${escapeHtml(h.text)}</span>
+        ${isAllFiles ? `<span class="cl-heading-file">${escapeHtml(file)}</span>` : ''}
+      </div>
     `;
     btn.addEventListener('click', () => {
-      const resolved = h.id ? `${fileName}#${h.id}` : fileName;
+      const resolved = h.id ? `${file}#${h.id}` : file;
       applyResolvedLink(resolved);
       clResolveModal.hidden = true;
       clResolveTarget = null;
@@ -643,27 +705,23 @@ function renderResolveHeadings(fileName) {
     clResolveHeadingList.appendChild(btn);
   });
   clHeadingBtns = [...clResolveHeadingList.querySelectorAll('.cl-heading-item')];
+
+  if (q) {
+    filterHeadingBtns(q);
+  }
 }
 
-clResolveFileSelect.addEventListener('change', () => {
-  const fileName = clResolveFileSelect.value;
-  if (!fileName) {
-    clResolveHeadingList.innerHTML = '<div class="cl-resolve-placeholder">Select a file to see headings</div>';
-    return;
-  }
-  renderResolveHeadings(fileName);
-});
-
-clResolveSearch.addEventListener('input', () => {
-  const q = clResolveSearch.value.trim().toLowerCase();
+function filterHeadingBtns(q) {
+  let count = 0;
   clHeadingBtns.forEach(btn => {
-    const text = btn.querySelector('.cl-heading-text').textContent.toLowerCase();
-    btn.style.display = text.includes(q) ? '' : 'none';
+    const text = btn.querySelector('.cl-heading-text')?.textContent.toLowerCase() || '';
+    const file = btn.querySelector('.cl-heading-file')?.textContent.toLowerCase() || '';
+    const match = text.includes(q) || file.includes(q);
+    btn.style.display = match ? '' : 'none';
+    if (match) count++;
   });
-  // Show no results message if all hidden
-  const anyVisible = clHeadingBtns.some(btn => btn.style.display !== 'none');
   let noMsg = clResolveHeadingList.querySelector('.cl-resolve-no-results');
-  if (!anyVisible) {
+  if (count === 0 && clHeadingBtns.length > 0) {
     if (!noMsg) {
       noMsg = document.createElement('div');
       noMsg.className = 'cl-resolve-no-results cl-resolve-placeholder';
@@ -671,9 +729,18 @@ clResolveSearch.addEventListener('input', () => {
       clResolveHeadingList.appendChild(noMsg);
     }
     noMsg.style.display = '';
-  } else {
-    if (noMsg) noMsg.style.display = 'none';
+  } else if (noMsg) {
+    noMsg.style.display = 'none';
   }
+}
+
+clResolveFileSelect.addEventListener('change', () => {
+  renderResolveHeadings(clResolveFileSelect.value);
+});
+
+clResolveSearch.addEventListener('input', () => {
+  const q = clResolveSearch.value.trim().toLowerCase();
+  filterHeadingBtns(q);
 });
 
 function openResolvePopup(resultIdx) {
@@ -684,7 +751,7 @@ function openResolvePopup(resultIdx) {
   const clResolveModalTitle2 = document.getElementById('clResolveModalTitle2');
   clResolveModalTitle2.textContent = r.tocText.trim();
 
-  clResolveFileSelect.innerHTML = '<option value="">-- Select a file --</option>';
+  clResolveFileSelect.innerHTML = '<option value="">-- All Files --</option>';
   clState.fileIndex.forEach(f => {
     const opt = document.createElement('option');
     opt.value = f.name;
@@ -692,9 +759,8 @@ function openResolvePopup(resultIdx) {
     clResolveFileSelect.appendChild(opt);
   });
   clResolveFileSelect.value = '';
-  clResolveHeadingList.innerHTML = '<div class="cl-resolve-placeholder">Select a file to see headings</div>';
   clResolveSearch.value = '';
-  clHeadingBtns = [];
+  renderResolveHeadings('');
 
   // Find matching sidebar item and preview anchor
   const sidebarItems = clResultsList.querySelectorAll('[data-result-idx]');
@@ -704,16 +770,23 @@ function openResolvePopup(resultIdx) {
     sidebarItem: [...sidebarItems].find(el => +el.dataset.resultIdx === resultIdx),
     previewAnchor: [...previewAnchors].find(el => +el.dataset.resultIdx === resultIdx),
   };
+  if (clResolveUnlinkBtn) {
+    clResolveUnlinkBtn.disabled = !r.resolved || r.resolved === '{0}';
+  }
+  if (window.lucide) lucide.createIcons();
   clResolveModal.hidden = false;
+  setTimeout(() => clResolveSearch.focus(), 50);
 }
 
 function applyResolvedLink(resolved) {
   if (!clResolveTarget) return;
   const { resultIdx, sidebarItem, previewAnchor } = clResolveTarget;
 
+  const isUnlink = !resolved || resolved === '{0}';
+
   // Update state
-  clState.results[resultIdx].resolved = resolved;
-  clState.results[resultIdx].status = 'matched';
+  clState.results[resultIdx].resolved = isUnlink ? null : resolved;
+  clState.results[resultIdx].status = isUnlink ? 'unresolved' : 'matched';
 
   // Update raw output — replace the specific {0} at correct position by rebuilding
   const resolvedHrefs = clState.results.map(r => r.resolved || '{0}');
@@ -727,15 +800,21 @@ function applyResolvedLink(resolved) {
 
   // Update preview anchor color
   if (previewAnchor) {
-    previewAnchor.setAttribute('href', resolved);
+    previewAnchor.setAttribute('href', isUnlink ? '{0}' : resolved);
   }
 
   // Update sidebar item
   if (sidebarItem) {
     const spans = sidebarItem.querySelectorAll('span');
-    spans[0].style.color = 'var(--success,#38a169)';
-    spans[0].textContent = `✓ ${clState.results[resultIdx].tocText}`;
-    spans[1].textContent = resolved;
+    if (isUnlink) {
+      spans[0].style.color = 'var(--danger,#e53e3e)';
+      spans[0].textContent = `✗ ${clState.results[resultIdx].tocText}`;
+      spans[1].textContent = 'unresolved';
+    } else {
+      spans[0].style.color = 'var(--success,#38a169)';
+      spans[0].textContent = `✓ ${clState.results[resultIdx].tocText}`;
+      spans[1].textContent = resolved;
+    }
   }
 
   // Re-check duplicate hrefs across all results and re-apply/remove DUP styling
@@ -795,58 +874,6 @@ function applyResolvedLink(resolved) {
     }
   });
 
-  // Refresh previewAnchor's event listeners (old ones reference stale href/resolved)
-  if (previewAnchor && previewAnchor.parentNode) {
-    const newAnchor = previewAnchor.cloneNode(true);
-    previewAnchor.parentNode.replaceChild(newAnchor, previewAnchor);
-
-    newAnchor.addEventListener('click', e => {
-      e.preventDefault();
-      openResolvePopup(clResolveTarget.resultIdx);
-    });
-
-    newAnchor.addEventListener('mouseenter', e => {
-      if (!resolved || resolved === '{0}') {
-        clTooltip.textContent = 'Unresolved — click to fix';
-        clTooltip.style.borderColor = 'var(--danger,#e53e3e)';
-      } else if (clDupeHrefs.has(resolved)) {
-        clTooltip.textContent = '⚠ Duplicate ID: ' + resolved;
-        clTooltip.style.borderColor = 'var(--warning,#d97706)';
-      } else {
-        clTooltip.textContent = '🔗 ' + resolved;
-        clTooltip.style.borderColor = 'var(--accent,#2B3A9C)';
-      }
-      clTooltip.style.display = 'block';
-      clTooltip.style.left = (e.clientX + 12) + 'px';
-      clTooltip.style.top = (e.clientY - 28) + 'px';
-    });
-
-    newAnchor.addEventListener('mousemove', e => {
-      clTooltip.style.left = (e.clientX + 12) + 'px';
-      clTooltip.style.top = (e.clientY - 28) + 'px';
-    });
-
-    newAnchor.addEventListener('mouseleave', () => {
-      clTooltip.style.display = 'none';
-    });
-
-    newAnchor.addEventListener('mouseenter', e => {
-      const idx = +newAnchor.dataset.resultIdx;
-      const sidebarItem = clResultsList.querySelector(`[data-result-idx="${idx}"]`);
-      if (sidebarItem) {
-        sidebarItem.style.background = 'var(--hover, rgba(43,58,156,0.08))';
-        sidebarItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      }
-    });
-    newAnchor.addEventListener('mouseleave', () => {
-      const idx = +newAnchor.dataset.resultIdx;
-      const sidebarItem = clResultsList.querySelector(`[data-result-idx="${idx}"]`);
-      if (sidebarItem) sidebarItem.style.background = '';
-    });
-
-    clResolveTarget.previewAnchor = newAnchor;
-  }
-
   clResultsList.querySelectorAll('[data-result-idx]').forEach(el => {
     const r = clState.results[+el.dataset.resultIdx];
     const isDupe = r.resolved && dupeHrefs.has(r.resolved);
@@ -876,7 +903,11 @@ function applyResolvedLink(resolved) {
   clStatDupe.textContent = dupeHrefs.size;
   updateProgressBar();
 
-  toast(`Linked to ${resolved}`, 'success');
+  if (isUnlink) {
+    toast(`Unlinked: ${clState.results[resultIdx].tocText}`, 'info');
+  } else {
+    toast(`Linked to ${resolved}`, 'success');
+  }
 }
 
 /* ══════════════════════════════════

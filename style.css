@@ -1550,8 +1550,66 @@ a.rle-citation.rle-highlight {
   flex: 1;
 }
 
+.cl-heading-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
+.cl-heading-file {
+  font-size: 0.68rem;
+  color: var(--text-muted, #6b7280);
+  font-family: var(--font-mono, monospace);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .cl-result-item:hover {
   background: var(--hover, rgba(0,0,0,0.05));
+}
+
+.cl-resolve-footer {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-card, #fafbfc);
+}
+
+.cl-btn-unlink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid var(--danger-border, #fca5a5);
+  background: var(--danger-bg, #fef2f2);
+  color: var(--danger, #dc2626);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cl-btn-unlink:hover:not(:disabled) {
+  background: var(--danger, #dc2626);
+  color: #ffffff;
+  border-color: var(--danger, #dc2626);
+}
+
+.cl-btn-unlink:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cl-btn-unlink .lucide {
+  width: 14px;
+  height: 14px;
 }
 
 /* ── Pagebreak Span Warning Modal ── */
